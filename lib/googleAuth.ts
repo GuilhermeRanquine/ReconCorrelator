@@ -1,13 +1,25 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
+import { initializeApp, getApps, getApp, FirebaseOptions } from 'firebase/app';
 import { 
   getAuth, 
   signInWithPopup, 
   GoogleAuthProvider, 
   onAuthStateChanged, 
-  signOut,
+  signOut, 
   User 
 } from 'firebase/auth';
-import firebaseConfig from '@/firebase-applet-config.json';
+
+const getFirebaseConfig = (): FirebaseOptions => {
+  return {
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || '',
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || process.env.FIREBASE_AUTH_DOMAIN || 'gen-lang-client-0602155012.firebaseapp.com',
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || 'gen-lang-client-0602155012',
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || 'gen-lang-client-0602155012.firebasestorage.app',
+    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || process.env.FIREBASE_MESSAGING_SENDER_ID || '882389567996',
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || process.env.FIREBASE_APP_ID || '',
+  };
+};
+
+const firebaseConfig = getFirebaseConfig();
 
 // Initialize Firebase App safely (singleton)
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
