@@ -15,7 +15,6 @@ import {
   Key,
   Copy,
   Lock,
-  Building,
   Briefcase,
   Layers,
   Filter

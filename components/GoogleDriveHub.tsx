@@ -160,18 +160,23 @@ export function GoogleDriveHub({ target, assets, onImportRawData }: GoogleDriveH
       let fileContent = '';
       let mime = 'text/plain';
 
+      const targetDomain = target?.domain || 'target.com';
+      const targetName = target?.name || 'Projeto Recon';
+      const inScopeList = target?.inScope?.join(', ') || '*.target.com';
+      const outOfScopeList = target?.outOfScope?.join(', ') || 'Nenhum';
+
       if (format === 'markdown') {
-        fileName = `Recon_Report_${target.domain}_${timestamp}.md`;
+        fileName = `Recon_Report_${targetDomain}_${timestamp}.md`;
         mime = 'text/markdown';
-        fileContent = `# Reconnaissance & Attack Surface Report: ${target.domain}\n\n` +
+        fileContent = `# Reconnaissance & Attack Surface Report: ${targetDomain}\n\n` +
           `**Data do Snapshot:** ${new Date().toLocaleString()}\n` +
-          `**Alvo:** ${target.name} (\`${target.domain}\`)\n` +
+          `**Alvo:** ${targetName} (\`${targetDomain}\`)\n` +
           `**Total de Ativos:** ${assets.length} | **Vivos:** ${assets.filter(a => a.isAlive).length}\n\n` +
-          `## Escopo\n- **In-Scope:** ${target.inScope.join(', ')}\n- **Out-of-Scope:** ${target.outOfScope.join(', ') || 'Nenhum'}\n\n` +
+          `## Escopo\n- **In-Scope:** ${inScopeList}\n- **Out-of-Scope:** ${outOfScopeList}\n\n` +
           `## Matriz de Ativos Descobertos\n` +
           assets.map(a => `- **${a.subdomain}** (${a.httpStatus || 'Down'}) - IPs: ${a.ips.join(', ') || 'N/A'} - Vulns: ${a.vulnerabilities.length}`).join('\n');
       } else {
-        fileName = `Recon_Data_${target.domain}_${timestamp}.json`;
+        fileName = `Recon_Data_${targetDomain}_${timestamp}.json`;
         mime = 'application/json';
         fileContent = JSON.stringify({ target, assets, exportedAt: new Date().toISOString() }, null, 2);
       }
@@ -377,7 +382,7 @@ export function GoogleDriveHub({ target, assets, onImportRawData }: GoogleDriveH
                   <FolderSync className="w-4 h-4 text-emerald-400" />
                   <span>Sincronização Rápida</span>
                 </span>
-                <span className="text-[10px] text-zinc-500">Alvo: {target.domain}</span>
+                <span className="text-[10px] text-zinc-500">Alvo: {target?.domain || 'Global'}</span>
               </div>
 
               <p className="text-xs text-zinc-400 leading-relaxed">
@@ -624,7 +629,7 @@ export function GoogleDriveHub({ target, assets, onImportRawData }: GoogleDriveH
                 <label className="text-[11px] text-zinc-400 block mb-1">Nome do Arquivo:</label>
                 <input
                   type="text"
-                  placeholder={`PoC_Notes_${target.domain}.md`}
+                  placeholder={`PoC_Notes_${target?.domain || 'target'}.md`}
                   value={docTitle}
                   onChange={(e) => setDocTitle(e.target.value)}
                   className="w-full px-3 py-1.5 bg-black border border-zinc-800 rounded-md text-xs text-zinc-200 focus:outline-none focus:border-blue-500"
@@ -635,7 +640,7 @@ export function GoogleDriveHub({ target, assets, onImportRawData }: GoogleDriveH
                 <label className="text-[11px] text-zinc-400 block mb-1">Conteúdo da Nota (Markdown):</label>
                 <textarea
                   rows={6}
-                  placeholder={`# Notas de Reconhecimento: ${target.domain}\n- Descobertas preliminares...\n- Endpoints com parâmetros refletidos...`}
+                  placeholder={`# Notas de Reconhecimento: ${target?.domain || 'target.com'}\n- Descobertas preliminares...\n- Endpoints com parâmetros refletidos...`}
                   value={docContent}
                   onChange={(e) => setDocContent(e.target.value)}
                   className="w-full px-3 py-2 bg-black border border-zinc-800 rounded-md text-xs text-zinc-200 focus:outline-none focus:border-blue-500 font-mono"

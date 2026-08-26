@@ -18,10 +18,20 @@
         "name": "next"
       }
     ],
+    "baseUrl": ".",
     "paths": {
       "@/*": ["./*"],
+      "react": ["C:/Users/ranquine/ReconCorrelator/node_modules/@types/react"],
+      "react/*": ["C:/Users/ranquine/ReconCorrelator/node_modules/@types/react/*"],
+      "react-dom": ["C:/Users/ranquine/ReconCorrelator/node_modules/@types/react-dom"],
+      "react-dom/*": ["C:/Users/ranquine/ReconCorrelator/node_modules/@types/react-dom/*"],
+      "next": ["C:/Users/ranquine/ReconCorrelator/node_modules/next"],
+      "next/*": ["C:/Users/ranquine/ReconCorrelator/node_modules/next/*"],
       "lucide-react": ["./lib/icons.tsx"]
-    }
+    },
+    "typeRoots": [
+      "C:/Users/ranquine/ReconCorrelator/node_modules/@types"
+    ]
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   "exclude": ["node_modules", "node_modules_old"]

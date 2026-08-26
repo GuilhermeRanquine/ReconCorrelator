@@ -346,6 +346,18 @@ export default function DashboardPage() {
     );
   }
 
+  const activeTarget: TargetProject = currentProject || (projects.length > 0 ? projects[0] : {
+    id: 'default-target',
+    name: 'Alvo Corporativo',
+    domain: 'target.com',
+    description: 'Alvo corporativo padrão',
+    accessCode: 'NEXUS-001',
+    createdAt: new Date().toISOString(),
+    inScope: ['*.target.com'],
+    outOfScope: [],
+    rules: []
+  });
+
   return (
     <div className="min-h-screen w-full bg-[var(--bg-main)] text-[var(--text-primary)] font-mono selection:bg-emerald-500 selection:text-black">
       {/* Dynamic Shrinking Header with Navigation & Themes */}
@@ -433,7 +445,7 @@ export default function DashboardPage() {
         {activeTab === 'terminal' && (
           <div className="space-y-4">
             <TerminalArsenal
-              target={currentProject}
+              target={activeTarget}
               assets={assets}
               onAssetsDiscovered={handleAssetsDiscovered}
               onAddVulnerability={handleAddVulnerability}
@@ -447,7 +459,7 @@ export default function DashboardPage() {
         {activeTab === 'workbench' && (
           <div className="space-y-4">
             <LiveReconWorkbench
-              target={currentProject}
+              target={activeTarget}
               onAssetsDiscovered={handleAssetsDiscovered}
               onAddVulnerability={handleAddVulnerability}
             />
@@ -458,7 +470,7 @@ export default function DashboardPage() {
         {activeTab === 'flowchart' && (
           <div className="space-y-4">
             <ReconFlowchart
-              target={currentProject}
+              target={activeTarget}
               onExecuteAutomation={handleExecuteAutomationFromStep}
             />
           </div>
@@ -468,7 +480,7 @@ export default function DashboardPage() {
         {activeTab === 'pipeline' && (
           <div className="space-y-4">
             <PipelineRunner
-              target={currentProject}
+              target={activeTarget}
               onJobFinished={(discovered) => handleAssetsDiscovered(discovered)}
             />
           </div>
