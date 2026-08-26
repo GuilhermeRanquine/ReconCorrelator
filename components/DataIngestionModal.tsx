@@ -89,8 +89,9 @@ export function DataIngestionModal({
       try {
         const parsed = JSON.parse(rawText);
         const list = Array.isArray(parsed) ? parsed : [parsed];
+        const subdomainsList = list.map((item: any) => typeof item === 'string' ? item : item.subdomain || item.host || item.url || item.ip).filter(Boolean);
         const res = ReconCorrelator.correlate({
-          assets: list,
+          subdomains: subdomainsList,
           rootDomain: target.domain,
           scopeGuard: guard,
         });

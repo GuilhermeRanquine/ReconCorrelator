@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readDb, getProjects, getAssets, getTerminalState, getReports, getProjectByAccessCode } from '@/lib/db';
+import { readDb, getProjects, getAssets, getTerminalState, getReports, getProjectByAccessCode, ReportEntry, TerminalFolder, TerminalSession } from '@/lib/db';
+import { CorrelatedAsset } from '@/types/recon';
 
 export async function GET(req: NextRequest) {
   try {
@@ -20,9 +21,9 @@ export async function GET(req: NextRequest) {
     }
 
     // Strictly isolated assets
-    let assets = [];
-    let terminal = { folders: [], sessions: [] };
-    let reports = [];
+    let assets: CorrelatedAsset[] = [];
+    let terminal: { folders: TerminalFolder[]; sessions: TerminalSession[] } = { folders: [], sessions: [] };
+    let reports: ReportEntry[] = [];
 
     if (activeProject) {
       assets = await getAssets({ projectId: activeProject.id, rootDomain: activeProject.domain });

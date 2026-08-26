@@ -134,6 +134,7 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
     // Render loop with smooth easing physics (lerp)
     function render() {
+      if (!ctx) return;
       time += 0.015;
       ctx.clearRect(0, 0, width, height);
 

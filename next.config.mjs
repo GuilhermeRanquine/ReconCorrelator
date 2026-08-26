@@ -23,7 +23,6 @@ const nextConfig = {
       },
     ],
   },
-  output: 'standalone',
   transpilePackages: ['motion'],
   webpack: (config, { dev }) => {
     config.resolve.alias = {
