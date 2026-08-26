@@ -253,7 +253,7 @@ export default function DashboardPage() {
     setAssets(merged);
 
     try {
-      await fetch('/api/recon/assets', {
+      await fetch('/api/db/assets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
