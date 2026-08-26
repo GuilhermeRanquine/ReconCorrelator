@@ -2,17 +2,30 @@
 
 @layer base {
   :root {
-    --background: #09090b;
-    --foreground: #f4f4f5;
+    --bg-main: #09090b;
+    --bg-card: rgba(18, 18, 23, 0.75);
+    --bg-card-hover: rgba(26, 26, 33, 0.9);
+    --bg-panel: rgba(12, 12, 16, 0.85);
+    --border-color: rgba(255, 255, 255, 0.08);
+    --border-highlight: rgba(16, 185, 129, 0.4);
+    --text-primary: #f4f4f5;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    --accent-color: #10b981;
+    --accent-glow: rgba(16, 185, 129, 0.3);
+    --accent-secondary: #06b6d4;
+    --header-bg: rgba(9, 9, 11, 0.85);
+    --badge-bg: rgba(16, 185, 129, 0.12);
   }
 
   body {
-    background-color: var(--background);
-    color: var(--foreground);
+    background-color: var(--bg-main);
+    color: var(--text-primary);
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 
   /* Custom Smooth Dark Scrollbar */
@@ -21,41 +34,46 @@
     height: 6px;
   }
   ::-webkit-scrollbar-track {
-    background: rgba(9, 9, 11, 0.9);
+    background: var(--bg-main);
   }
   ::-webkit-scrollbar-thumb {
-    background: rgba(39, 39, 42, 0.8);
+    background: rgba(113, 113, 122, 0.4);
     border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(16, 185, 129, 0.6);
+    background: var(--accent-color);
   }
 }
 
-/* Glassmorphism & Cyber Aesthetics */
+/* Glassmorphism & iOS Cyber Aesthetics */
 .glass-panel {
-  background: rgba(12, 12, 16, 0.75);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-panel);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-color);
+  transition: all 0.25s ease;
 }
 
 .glass-card {
-  background: rgba(18, 18, 23, 0.6);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-color);
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glass-card:hover {
-  background: rgba(24, 24, 30, 0.8);
-  border-color: rgba(16, 185, 129, 0.3);
-  box-shadow: 0 8px 32px -4px rgba(0, 0, 0, 0.5), 0 0 20px -2px rgba(16, 185, 129, 0.15);
+  background: var(--bg-card-hover);
+  border-color: var(--border-highlight);
+  box-shadow: 0 12px 36px -6px rgba(0, 0, 0, 0.6), 0 0 24px -4px var(--accent-glow);
   transform: translateY(-2px);
 }
 
 /* Cyber Glow Utilities */
+.glow-accent {
+  box-shadow: 0 0 24px -4px var(--accent-glow);
+}
+
 .glow-emerald {
   box-shadow: 0 0 20px -3px rgba(16, 185, 129, 0.35);
 }
@@ -68,22 +86,26 @@
   box-shadow: 0 0 20px -3px rgba(168, 85, 247, 0.35);
 }
 
+.glow-pink {
+  box-shadow: 0 0 20px -3px rgba(255, 121, 198, 0.35);
+}
+
 .glow-red {
   box-shadow: 0 0 20px -3px rgba(239, 68, 68, 0.35);
 }
 
 /* Background Cyber Grid */
 .cyber-grid-bg {
-  background-size: 32px 32px;
+  background-size: 36px 36px;
   background-image: 
-    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
 }
 
 /* Smooth Micro-animations */
 @keyframes pulseSlow {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.7; transform: scale(0.98); }
+  50% { opacity: 0.75; transform: scale(0.985); }
 }
 
 .animate-pulse-slow {
@@ -98,7 +120,7 @@
 .scanline-effect {
   position: absolute;
   top: 0; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.6), transparent);
+  background: linear-gradient(90deg, transparent, var(--accent-color), transparent);
   animation: scanline 8s linear infinite;
   pointer-events: none;
 }

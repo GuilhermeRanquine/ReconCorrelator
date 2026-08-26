@@ -1,7 +1,23 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { TargetProject, CorrelatedAsset, Vulnerability, generateAccessCode, BugBountyPolicy, ScopeRule } from '@/types/recon';
+import { 
+  TargetProject, 
+  CorrelatedAsset, 
+  Vulnerability, 
+  generateAccessCode, 
+  BugBountyPolicy, 
+  ScopeRule 
+} from '@/types/recon';
+import { 
+  EnterpriseCompany, 
+  IndustrySector, 
+  EnterpriseTier, 
+  SlaLevel, 
+  ComplianceFramework, 
+  ConfidentialityLevel 
+} from '@/types/enterprise';
+import { encryptData, decryptData, EncryptedPayload, encryptSensitiveField, decryptSensitiveField } from '@/lib/crypto';
 
 export interface User {
   id: string;
@@ -69,6 +85,7 @@ export interface ReportEntry {
   targetId?: string;
   createdAt: string;
   author?: string;
+  googleDriveFileId?: string;
 }
 
 export interface AuditLog {
@@ -81,8 +98,9 @@ export interface AuditLog {
 
 export interface DatabaseSchema {
   version: number;
-  engine: 'SQL-Relational-v3';
+  engine: 'NEXUS-SQL-Relational-Encrypted-v4';
   lastUpdated: string;
+  encryptionStandard: 'AES-256-GCM + PBKDF2-SHA512-600k';
   users: User[];
   sessions: Session[];
   projects: TargetProject[];
@@ -94,8 +112,22 @@ export interface DatabaseSchema {
   auditLogs: AuditLog[];
 }
 
-const DB_DIR = path.join(process.cwd(), 'data');
+/**
+ * Resolves the primary Database Storage Path:
+ * Prioritizes external configured path (e.g. process.env.NEXUS_DB_PATH or external drive)
+ * to keep sensitive client databases outside git repository by default.
+ */
+function getStorageDirectory(): string {
+  if (process.env.NEXUS_DB_PATH && fs.existsSync(process.env.NEXUS_DB_PATH)) {
+    return process.env.NEXUS_DB_PATH;
+  }
+  // Default to data/ inside project if not externally set
+  return path.join(process.cwd(), 'data');
+}
+
+const DB_DIR = getStorageDirectory();
 const DB_PATH = path.join(DB_DIR, 'recon_correlator_db.json');
+const VAULT_PATH = path.join(DB_DIR, 'recon_correlator_db.vault.enc');
 
 // Ensure data folder exists
 function ensureDbDir() {
@@ -105,10 +137,10 @@ function ensureDbDir() {
 }
 
 /**
- * PBKDF2 helper for database initialization seed
+ * PBKDF2 helper for administrator user password hashing
  */
 function hashInitialPassword(password: string, salt: string): string {
-  return crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+  return crypto.pbkdf2Sync(password, salt, 600000, 64, 'sha512').toString('hex');
 }
 
 /**
@@ -134,9 +166,10 @@ function getInitialAdminUser(): User {
 function getInitialDbState(): DatabaseSchema {
   const admin = getInitialAdminUser();
   return {
-    version: 3,
-    engine: 'SQL-Relational-v3',
+    version: 4,
+    engine: 'NEXUS-SQL-Relational-Encrypted-v4',
     lastUpdated: new Date().toISOString(),
+    encryptionStandard: 'AES-256-GCM + PBKDF2-SHA512-600k',
     users: [admin],
     sessions: [],
     projects: [],
@@ -149,8 +182,11 @@ function getInitialDbState(): DatabaseSchema {
       {
         id: `audit-${Date.now()}`,
         userId: admin.id,
-        action: 'SQL_DATABASE_INITIALIZED',
-        details: { message: 'Banco de dados Relacional ReconCorrelator inicializado com usuário ranquine autenticado via hash PBKDF2/SHA-512.' },
+        action: 'ENTERPRISE_VAULT_INITIALIZED',
+        details: { 
+          message: 'Banco de dados Enterprise MSSP inicializado com criptografia AES-256-GCM e hash PBKDF2-SHA512 (600.000 iterações).',
+          storagePath: DB_DIR
+        },
         timestamp: new Date().toISOString(),
       },
     ],
@@ -160,10 +196,26 @@ function getInitialDbState(): DatabaseSchema {
 let writeLock = Promise.resolve();
 
 /**
- * Reads database schema with fallback, schema migrations & auto-recovery
+ * Reads database schema with dual-fallback, encrypted vault loading and schema migrations
  */
 export async function readDb(): Promise<DatabaseSchema> {
   ensureDbDir();
+  
+  // 1. Try loading from Encrypted Vault if present
+  if (fs.existsSync(VAULT_PATH)) {
+    try {
+      const vaultRaw = fs.readFileSync(VAULT_PATH, 'utf-8');
+      const payload = JSON.parse(vaultRaw) as EncryptedPayload;
+      const decrypted = decryptData<DatabaseSchema>(payload);
+      if (decrypted && decrypted.users) {
+        return normalizeDatabase(decrypted);
+      }
+    } catch (vaultErr) {
+      console.warn('Vault decryption fallback to standard JSON store:', vaultErr);
+    }
+  }
+
+  // 2. Load from JSON store
   if (!fs.existsSync(DB_PATH)) {
     const initialState = getInitialDbState();
     await writeDb(initialState);
@@ -179,67 +231,7 @@ export async function readDb(): Promise<DatabaseSchema> {
     }
 
     const parsed = JSON.parse(content) as DatabaseSchema;
-    let mutated = false;
-
-    // Schema arrays normalization
-    if (!parsed.users || !Array.isArray(parsed.users)) {
-      parsed.users = [getInitialAdminUser()];
-      mutated = true;
-    } else {
-      // Ensure "ranquine" user exists and is properly salted
-      const ranquineUser = parsed.users.find(u => u.username.toLowerCase() === 'ranquine');
-      if (!ranquineUser) {
-        parsed.users.push(getInitialAdminUser());
-        mutated = true;
-      }
-    }
-
-    if (!parsed.sessions || !Array.isArray(parsed.sessions)) {
-      parsed.sessions = [];
-      mutated = true;
-    }
-    if (!parsed.projects || !Array.isArray(parsed.projects)) {
-      parsed.projects = [];
-      mutated = true;
-    }
-    if (!parsed.assets || !Array.isArray(parsed.assets)) {
-      parsed.assets = [];
-      mutated = true;
-    }
-    if (!parsed.reconCache || !Array.isArray(parsed.reconCache)) {
-      parsed.reconCache = [];
-      mutated = true;
-    }
-    if (!parsed.terminalSessions || !Array.isArray(parsed.terminalSessions)) {
-      parsed.terminalSessions = [];
-      mutated = true;
-    }
-    if (!parsed.terminalFolders || !Array.isArray(parsed.terminalFolders)) {
-      parsed.terminalFolders = [];
-      mutated = true;
-    }
-    if (!parsed.reports || !Array.isArray(parsed.reports)) {
-      parsed.reports = [];
-      mutated = true;
-    }
-    if (!parsed.auditLogs || !Array.isArray(parsed.auditLogs)) {
-      parsed.auditLogs = [];
-      mutated = true;
-    }
-
-    // Ensure all projects have an uppercase access code
-    for (const p of parsed.projects) {
-      if (!p.accessCode) {
-        p.accessCode = generateAccessCode();
-        mutated = true;
-      }
-    }
-
-    if (mutated) {
-      await writeDb(parsed);
-    }
-
-    return parsed;
+    return await normalizeDatabase(parsed);
   } catch (err) {
     console.error('Error reading database, restoring pristine baseline:', err);
     const initialState = getInitialDbState();
@@ -249,19 +241,114 @@ export async function readDb(): Promise<DatabaseSchema> {
 }
 
 /**
- * Thread-safe atomic write to SQL relational database file
+ * Normalizes and validates schema integrity
+ */
+async function normalizeDatabase(parsed: DatabaseSchema): Promise<DatabaseSchema> {
+  let mutated = false;
+
+  if (!parsed.users || !Array.isArray(parsed.users)) {
+    parsed.users = [getInitialAdminUser()];
+    mutated = true;
+  } else {
+    const ranquineUser = parsed.users.find(u => u.username.toLowerCase() === 'ranquine');
+    if (!ranquineUser) {
+      parsed.users.push(getInitialAdminUser());
+      mutated = true;
+    }
+  }
+
+  if (!parsed.sessions || !Array.isArray(parsed.sessions)) {
+    parsed.sessions = [];
+    mutated = true;
+  }
+  if (!parsed.projects || !Array.isArray(parsed.projects)) {
+    parsed.projects = [];
+    mutated = true;
+  }
+  if (!parsed.assets || !Array.isArray(parsed.assets)) {
+    parsed.assets = [];
+    mutated = true;
+  }
+  if (!parsed.reconCache || !Array.isArray(parsed.reconCache)) {
+    parsed.reconCache = [];
+    mutated = true;
+  }
+  if (!parsed.terminalSessions || !Array.isArray(parsed.terminalSessions)) {
+    parsed.terminalSessions = [];
+    mutated = true;
+  }
+  if (!parsed.terminalFolders || !Array.isArray(parsed.terminalFolders)) {
+    parsed.terminalFolders = [];
+    mutated = true;
+  }
+  if (!parsed.reports || !Array.isArray(parsed.reports)) {
+    parsed.reports = [];
+    mutated = true;
+  }
+  if (!parsed.auditLogs || !Array.isArray(parsed.auditLogs)) {
+    parsed.auditLogs = [];
+    mutated = true;
+  }
+
+  // Ensure all projects have an uppercase access code and enterprise attributes
+  for (const p of parsed.projects) {
+    if (!p.accessCode) {
+      p.accessCode = generateAccessCode('NEXUS');
+      mutated = true;
+    }
+    if (!p.industry) {
+      p.industry = 'saas_cloud';
+    }
+    if (!p.tier) {
+      p.tier = 'tier2_enterprise';
+    }
+    if (!p.sla) {
+      p.sla = '4h_business_response';
+    }
+    if (!p.confidentialityLevel) {
+      p.confidentialityLevel = 'strictly_confidential';
+    }
+    if (!p.complianceFrameworks) {
+      p.complianceFrameworks = ['ISO27001', 'LGPD', 'SOC2_TYPE2'];
+    }
+  }
+
+  if (mutated) {
+    await writeDb(parsed);
+  }
+
+  return parsed;
+}
+
+/**
+ * Thread-safe atomic write to encrypted vault & JSON store
  */
 export async function writeDb(data: DatabaseSchema): Promise<void> {
   ensureDbDir();
   data.lastUpdated = new Date().toISOString();
+  data.version = 4;
+  data.engine = 'NEXUS-SQL-Relational-Encrypted-v4';
+  data.encryptionStandard = 'AES-256-GCM + PBKDF2-SHA512-600k';
   
   // Chain write locks to avoid race conditions
   writeLock = writeLock.then(() => {
     return new Promise<void>((resolve, reject) => {
       try {
+        // 1. Write atomic JSON store
         const tmpPath = `${DB_PATH}.tmp.${Date.now()}`;
         fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
         fs.renameSync(tmpPath, DB_PATH);
+
+        // 2. Write AES-256-GCM Encrypted Vault Binary
+        try {
+          const encryptedVault = encryptData(data);
+          const tmpVaultPath = `${VAULT_PATH}.tmp.${Date.now()}`;
+          fs.writeFileSync(tmpVaultPath, JSON.stringify(encryptedVault), 'utf-8');
+          fs.renameSync(tmpVaultPath, VAULT_PATH);
+        } catch (encErr) {
+          console.error('Failed to create encrypted vault snapshot:', encErr);
+        }
+
         resolve();
       } catch (err) {
         console.error('Failed to atomically write DB:', err);
@@ -331,7 +418,6 @@ export async function getSessionByTokenHash(tokenHash: string): Promise<Session 
   if (!session) return null;
 
   if (new Date(session.expiresAt).getTime() <= now) {
-    // Session expired, remove
     db.sessions = db.sessions.filter(s => s.tokenHash !== tokenHash);
     await writeDb(db);
     return null;
@@ -347,7 +433,7 @@ export async function deleteSession(tokenHash: string): Promise<void> {
 }
 
 // ----------------------------------------------------
-// 📁 PROJECT & BOUNTY OPERATIONS (Strict Access Code Isolation)
+// 🏢 ENTERPRISE COMPANIES & PROJECTS OPERATIONS
 // ----------------------------------------------------
 
 export async function getProjects(accessCode?: string, userId?: string): Promise<TargetProject[]> {
@@ -376,22 +462,27 @@ export async function getProjectByAccessCode(accessCode: string): Promise<Target
 export async function saveProject(project: TargetProject): Promise<TargetProject[]> {
   const db = await readDb();
   
-  // Ensure accessCode is present and uppercase
+  // Ensure accessCode is present and formatted
   if (!project.accessCode) {
-    project.accessCode = generateAccessCode();
+    project.accessCode = generateAccessCode('NEXUS');
   } else {
     project.accessCode = project.accessCode.trim().toUpperCase();
   }
 
-  // Ensure unique accessCode among other projects
-  const existingWithCode = db.projects.find(p => p.id !== project.id && p.accessCode?.toUpperCase() === project.accessCode.toUpperCase());
-  if (existingWithCode) {
-    project.accessCode = generateAccessCode();
-  }
+  // Set default enterprise values if omitted
+  project.industry = project.industry || 'saas_cloud';
+  project.tier = project.tier || 'tier2_enterprise';
+  project.sla = project.sla || '4h_business_response';
+  project.confidentialityLevel = project.confidentialityLevel || 'strictly_confidential';
+  project.complianceFrameworks = project.complianceFrameworks || ['ISO27001', 'LGPD', 'SOC2_TYPE2'];
+  project.contractStatus = project.contractStatus || 'active';
+  project.inScope = project.inScope || [project.domain];
+  project.outOfScope = project.outOfScope || [];
+  project.rules = project.rules || [];
 
   const index = db.projects.findIndex(p => p.id === project.id);
   if (index >= 0) {
-    db.projects[index] = project;
+    db.projects[index] = { ...db.projects[index], ...project };
   } else {
     db.projects.unshift(project);
   }
@@ -415,6 +506,94 @@ export async function deleteProject(id: string): Promise<{ remaining: TargetProj
   
   await writeDb(db);
   return { remaining: db.projects };
+}
+
+// ----------------------------------------------------
+// 📊 ENTERPRISE ANALYTICS & THREAT INTELLIGENCE AGGREGATION
+// ----------------------------------------------------
+
+export async function getEnterpriseAnalytics(projectId?: string) {
+  const db = await readDb();
+  const targetProjects = projectId ? db.projects.filter(p => p.id === projectId) : db.projects;
+  const projectIds = new Set(targetProjects.map(p => p.id));
+  
+  const relevantAssets = projectId 
+    ? db.assets.filter(a => projectIds.has(a.projectId || '') || targetProjects.some(p => a.rootDomain === p.domain))
+    : db.assets;
+
+  // Severity Counter
+  let criticalCount = 0;
+  let highCount = 0;
+  let mediumCount = 0;
+  let lowCount = 0;
+  let infoCount = 0;
+
+  const attackVectorsMap: Record<string, number> = {
+    'Web Application': 0,
+    'Exposed API / Swagger': 0,
+    'Subdomain Takeover': 0,
+    'Cloud Misconfiguration': 0,
+    'Open Port / Service': 0,
+    'TLS / Certificate Weakness': 0,
+  };
+
+  for (const asset of relevantAssets) {
+    if (asset.takeoverRisk) {
+      attackVectorsMap['Subdomain Takeover'] = (attackVectorsMap['Subdomain Takeover'] || 0) + 1;
+    }
+    if ((asset.ports?.length || 0) > 3) {
+      attackVectorsMap['Open Port / Service'] = (attackVectorsMap['Open Port / Service'] || 0) + 1;
+    }
+    
+    for (const v of asset.vulnerabilities || []) {
+      const sev = v.severity?.toLowerCase();
+      if (sev === 'critical') criticalCount++;
+      else if (sev === 'high') highCount++;
+      else if (sev === 'medium') mediumCount++;
+      else if (sev === 'low') lowCount++;
+      else infoCount++;
+
+      const vname = (v.name || '').toLowerCase();
+      if (vname.includes('api') || vname.includes('swagger') || vname.includes('graphql')) {
+        attackVectorsMap['Exposed API / Swagger']++;
+      } else if (vname.includes('cloud') || vname.includes('s3') || vname.includes('bucket')) {
+        attackVectorsMap['Cloud Misconfiguration']++;
+      } else {
+        attackVectorsMap['Web Application']++;
+      }
+    }
+  }
+
+  const totalFindings = criticalCount + highCount + mediumCount + lowCount + infoCount;
+  
+  // Composite Risk Score formula (0-100)
+  const compositeRisk = Math.min(
+    100,
+    Math.round(criticalCount * 25 + highCount * 12 + mediumCount * 4 + lowCount * 1)
+  );
+
+  return {
+    totalCompanies: db.projects.length,
+    totalAssets: relevantAssets.length,
+    aliveHosts: relevantAssets.filter(a => a.isAlive).length,
+    takeoverRisks: relevantAssets.filter(a => a.takeoverRisk).length,
+    totalFindings,
+    severityBreakdown: {
+      critical: criticalCount,
+      high: highCount,
+      medium: mediumCount,
+      low: lowCount,
+      info: infoCount,
+    },
+    attackVectors: attackVectorsMap,
+    compositeRiskScore: compositeRisk,
+    encryptionStatus: {
+      standard: 'AES-256-GCM',
+      kdf: 'PBKDF2-SHA512 (600,000 rounds)',
+      vaultPath: VAULT_PATH,
+      storagePath: DB_DIR,
+    }
+  };
 }
 
 // ----------------------------------------------------
@@ -482,22 +661,18 @@ export async function upsertAssets(
     const existing = assetMap.get(key);
 
     if (existing) {
-      // Merge properties smartly
       const mergedIps = Array.from(new Set([...(existing.ips || []), ...(stub.ips || [])]));
       const mergedCnames = Array.from(new Set([...(existing.cnames || []), ...(stub.cnames || [])]));
       const mergedTags = Array.from(new Set([...(existing.tags || []), ...(stub.tags || [])]));
 
-      // Merge ports
       const portMap = new Map<number, any>();
       for (const p of existing.ports || []) portMap.set(p.port, p);
       for (const p of stub.ports || []) portMap.set(p.port, p);
 
-      // Merge technologies
       const techMap = new Map<string, any>();
       for (const t of existing.technologies || []) techMap.set(t.name.toLowerCase(), t);
       for (const t of stub.technologies || []) techMap.set(t.name.toLowerCase(), t);
 
-      // Merge vulnerabilities
       const vulnsMap = new Map<string, Vulnerability>();
       for (const v of existing.vulnerabilities || []) vulnsMap.set(v.id || v.name, v);
       for (const v of stub.vulnerabilities || []) vulnsMap.set(v.id || v.name, v);
@@ -524,7 +699,6 @@ export async function upsertAssets(
         lastUpdated: new Date().toISOString(),
       });
     } else {
-      // Create new clean asset entry
       const newAsset: CorrelatedAsset = {
         id: stub.id || `asset-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         projectId: stub.projectId || projectId,
@@ -652,7 +826,6 @@ export async function setReconCache(
 export async function getTerminalState(targetId: string) {
   const db = await readDb();
   
-  // Default folders if target has none
   let folders = db.terminalFolders.filter(f => f.targetId === targetId);
   if (folders.length === 0) {
     folders = [
@@ -673,12 +846,10 @@ export async function saveTerminalState(
 ) {
   const db = await readDb();
 
-  // Replace folders for this specific target
   const otherFolders = db.terminalFolders.filter(f => f.targetId !== targetId);
   const taggedFolders = folders.map(f => ({ ...f, targetId }));
   db.terminalFolders = [...otherFolders, ...taggedFolders];
 
-  // Replace sessions for this specific target
   const otherSessions = db.terminalSessions.filter(s => s.targetId !== targetId);
   const taggedSessions = sessions.map(s => ({ ...s, targetId }));
   db.terminalSessions = [...otherSessions, ...taggedSessions];

@@ -33,11 +33,13 @@ import {
   Search, 
   Plus,
   Lock,
-  LogOut
-} from 'lucide-react';
+  LogOut,
+  Check,
+  X
+} from '@/lib/icons';
 
 interface GoogleDriveHubProps {
-  target: TargetProject;
+  target: TargetProject | null;
   assets: CorrelatedAsset[];
   onImportRawData?: (rawText: string) => void;
 }

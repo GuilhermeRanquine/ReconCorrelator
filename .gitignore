@@ -1,15 +1,62 @@
+# ========================================================
+# 🛡️ NEXUS ENTERPRISE DEVSECOPS - ZERO LEAK .GITIGNORE
+# ========================================================
+
 # Dependencies
 node_modules/
 node_modules_old/
 .pnpm-store/
 
-# Next.js build
+# Next.js build & caches
 .next/
 out/
 build/
 dist/
+.cache/
 
-# Environment files
+# 🔒 CYBERSECURITY & SENSITIVE DATA EXCLUSIONS (CRITICAL)
+data/
+*.vault.enc
+*.db
+*.sqlite
+*.sqlite3
+*.enc
+*.dump
+*.bin
+
+# 📄 Client Penetration & Bug Bounty Reports (Store in Google Drive 5TB)
+reports/*
+!reports/.gitkeep
+!reports/README.md
+!reports/REL-*.md
+
+# 🛡️ Raw Scans, Artifacts, Dumps & Network Captures
+scans/
+artifacts/
+dumps/
+backups/
+logs/
+*.pcap
+*.cap
+*.nmap
+*.gnmap
+*.xml
+*.nuclei
+*.jsonl
+
+# 🔑 Secrets, Cryptographic Keys, Tokens & Credentials
+*.key
+*.pem
+*.crt
+*.pfx
+*.p12
+*.secret
+tokens.json
+credentials.json
+drive_tokens.json
+google-service-account.json
+
+# 🌐 Environment files (DO NOT COMMIT SECRETS)
 .env*
 !.env.example
 firebase-applet-config.json
@@ -24,6 +71,7 @@ pnpm-debug.log*
 
 # OS / IDE
 .DS_Store
+Thumbs.db
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json

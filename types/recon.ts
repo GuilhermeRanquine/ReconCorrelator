@@ -42,11 +42,21 @@ export interface BugBountyPolicy {
   extractedAt: string;
 }
 
+import { 
+  IndustrySector, 
+  EnterpriseTier, 
+  SlaLevel, 
+  ComplianceFramework, 
+  ConfidentialityLevel, 
+  CloudAccount, 
+  EnterpriseContact 
+} from './enterprise';
+
 export interface TargetProject {
   id: string;
-  name: string;
-  domain: string;
-  accessCode: string; // Unique access code for strict isolation (e.g. BB-7F8A-9C2D)
+  name: string; // Razão Social / Project Name
+  domain: string; // Primary domain
+  accessCode: string; // Unique access code for strict isolation (e.g. BB-7F8A-9C2D or NEXUS-7F8A)
   description: string;
   createdAt: string;
   platform?: BugBountyPlatform;
@@ -56,6 +66,27 @@ export interface TargetProject {
   rules: ScopeRule[];
   policy?: BugBountyPolicy;
   isDemo?: boolean;
+
+  // 🏢 Enterprise MSSP Extensions
+  tradeName?: string;
+  cnpjOrTaxId?: string;
+  industry?: IndustrySector;
+  tier?: EnterpriseTier;
+  sla?: SlaLevel;
+  confidentialityLevel?: ConfidentialityLevel;
+  registeredDomains?: string[];
+  ipRangesCidr?: string[];
+  cloudAccounts?: CloudAccount[];
+  contacts?: EnterpriseContact[];
+  complianceFrameworks?: ComplianceFramework[];
+  contractStatus?: 'active' | 'onboarding' | 'audit_in_progress' | 'paused' | 'terminated';
+  contractStartDate?: string;
+  contractRenewalDate?: string;
+  ndaSignedAt?: string;
+  ndaExpiresAt?: string;
+  compositeRiskScore?: number;
+  customTags?: string[];
+  notes?: string;
 }
 
 export function generateAccessCode(prefix: string = 'BB'): string {

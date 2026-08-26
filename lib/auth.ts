@@ -2,12 +2,12 @@ import crypto from 'crypto';
 import { NextRequest } from 'next/server';
 import { getSessionByTokenHash, getUserById, Session, User } from './db';
 
-const PBKDF2_ITERATIONS = 100000;
+const PBKDF2_ITERATIONS = 600000;
 const KEY_LENGTH = 64;
 const DIGEST = 'sha512';
 
 /**
- * Hashes a plain password with a random cryptographically secure salt using PBKDF2-SHA512
+ * Hashes a plain password with a random cryptographically secure salt using PBKDF2-SHA512 (600k rounds)
  */
 export function hashPassword(password: string, existingSalt?: string): { hash: string; salt: string } {
   const salt = existingSalt || crypto.randomBytes(32).toString('hex');
@@ -16,15 +16,26 @@ export function hashPassword(password: string, existingSalt?: string): { hash: s
 }
 
 /**
- * Verifies a password against the stored PBKDF2 hash using constant-time comparison
+ * Verifies a password against the stored PBKDF2 hash using constant-time comparison (supporting 600k and legacy 100k)
  */
 export function verifyPassword(password: string, storedHash: string, salt: string): boolean {
   try {
-    const { hash } = hashPassword(password, salt);
-    const hashBuf = Buffer.from(hash, 'hex');
+    // 1. Try with standard 600,000 iterations
+    const hash600k = crypto.pbkdf2Sync(password, salt, 600000, KEY_LENGTH, DIGEST).toString('hex');
+    const hashBuf600k = Buffer.from(hash600k, 'hex');
     const storedBuf = Buffer.from(storedHash, 'hex');
-    if (hashBuf.length !== storedBuf.length) return false;
-    return crypto.timingSafeEqual(hashBuf, storedBuf);
+    if (hashBuf600k.length === storedBuf.length && crypto.timingSafeEqual(hashBuf600k, storedBuf)) {
+      return true;
+    }
+
+    // 2. Fallback to 100,000 iterations for legacy compatibility
+    const hash100k = crypto.pbkdf2Sync(password, salt, 100000, KEY_LENGTH, DIGEST).toString('hex');
+    const hashBuf100k = Buffer.from(hash100k, 'hex');
+    if (hashBuf100k.length === storedBuf.length && crypto.timingSafeEqual(hashBuf100k, storedBuf)) {
+      return true;
+    }
+
+    return false;
   } catch (err) {
     console.error('Password verification error:', err);
     return false;

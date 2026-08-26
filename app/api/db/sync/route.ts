@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readDb, getProjects, getAssets, getTerminalState, getReports, getProjectByAccessCode, ReportEntry, TerminalFolder, TerminalSession } from '@/lib/db';
+import { 
+  readDb, 
+  getProjects, 
+  getAssets, 
+  getTerminalState, 
+  getReports, 
+  getProjectByAccessCode, 
+  getEnterpriseAnalytics,
+  ReportEntry, 
+  TerminalFolder, 
+  TerminalSession 
+} from '@/lib/db';
 import { CorrelatedAsset } from '@/types/recon';
 
 export async function GET(req: NextRequest) {
@@ -16,11 +27,11 @@ export async function GET(req: NextRequest) {
     let activeProject = null;
     if (accessCode) {
       activeProject = await getProjectByAccessCode(accessCode);
-    } else if (targetId) {
+    } else if (targetId && targetId !== 'all') {
       activeProject = projects.find(p => p.id === targetId) || null;
     }
 
-    // Strictly isolated assets
+    // Assets extraction
     let assets: CorrelatedAsset[] = [];
     let terminal: { folders: TerminalFolder[]; sessions: TerminalSession[] } = { folders: [], sessions: [] };
     let reports: ReportEntry[] = [];
@@ -32,30 +43,23 @@ export async function GET(req: NextRequest) {
     } else if (rootDomain) {
       assets = await getAssets({ rootDomain });
       reports = await getReports(rootDomain);
+    } else {
+      // Global aggregation: return all assets for Power BI Dashboard
+      assets = db.assets;
     }
+
+    const analytics = await getEnterpriseAnalytics(activeProject?.id);
 
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
       projectsCount: projects.length,
-      // Only return projects list metadata (or filtered if authenticated)
-      projects: projects.map(p => ({
-        id: p.id,
-        name: p.name,
-        domain: p.domain,
-        description: p.description,
-        accessCode: p.accessCode,
-        platform: p.platform,
-        createdAt: p.createdAt,
-        inScope: p.inScope,
-        outOfScope: p.outOfScope,
-        rules: p.rules,
-        policy: p.policy,
-      })),
+      projects,
       activeProject,
       assets,
       terminal,
       reports,
+      analytics,
       totalAssetsCount: assets.length,
     });
   } catch (err: any) {

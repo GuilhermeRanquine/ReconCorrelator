@@ -2,22 +2,24 @@
 
 import React, { useState } from 'react';
 import { TargetProject, generateAccessCode } from '@/types/recon';
+import { IndustrySector, EnterpriseTier, SlaLevel, ComplianceFramework } from '@/types/enterprise';
 import { 
   X, 
-  FolderKanban, 
   Trash2, 
   Plus, 
   Globe, 
   Check, 
   AlertTriangle, 
-  Sparkles, 
   ShieldCheck,
-  Layers,
-  ArrowRight,
+  Building2,
   Key,
   Copy,
-  Lock
-} from 'lucide-react';
+  Lock,
+  Building,
+  Briefcase,
+  Layers,
+  Filter
+} from '@/lib/icons';
 
 interface ProjectManagerModalProps {
   isOpen: boolean;
@@ -38,8 +40,14 @@ export function ProjectManagerModal({
   onDeleteProject,
   onCreateNewProject,
 }: ProjectManagerModalProps) {
+  // Form state
   const [newDomain, setNewDomain] = useState('');
   const [newName, setNewName] = useState('');
+  const [newTradeName, setNewTradeName] = useState('');
+  const [newCnpj, setNewCnpj] = useState('');
+  const [newIndustry, setNewIndustry] = useState<IndustrySector>('fintech');
+  const [newTier, setNewTier] = useState<EnterpriseTier>('tier1_mission_critical');
+  const [newSla, setNewSla] = useState<SlaLevel>('24_7_soc_15m_crit');
   const [customAccessCode, setCustomAccessCode] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -60,15 +68,23 @@ export function ProjectManagerModal({
     if (!newDomain.trim()) return;
     const cleanDomain = newDomain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
     const cleanName = newName.trim() || cleanDomain;
-    const code = customAccessCode.trim() ? customAccessCode.trim().toUpperCase() : generateAccessCode();
+    const code = customAccessCode.trim() ? customAccessCode.trim().toUpperCase() : generateAccessCode('NEXUS');
 
     const newProj: TargetProject = {
       id: `target-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       name: cleanName,
+      tradeName: newTradeName.trim() || cleanName,
+      cnpjOrTaxId: newCnpj.trim() || undefined,
+      industry: newIndustry,
+      tier: newTier,
+      sla: newSla,
       domain: cleanDomain,
       accessCode: code,
-      description: `Superfície de reconhecimento do programa ${cleanName}`,
+      description: `Superfície de reconhecimento e monitoramento contínuo da empresa ${cleanName}`,
       createdAt: new Date().toISOString(),
+      confidentialityLevel: 'strictly_confidential',
+      complianceFrameworks: ['ISO27001', 'LGPD', 'SOC2_TYPE2'],
+      contractStatus: 'active',
       inScope: [`*.${cleanDomain}`, cleanDomain],
       outOfScope: [],
       rules: [
@@ -89,17 +105,11 @@ export function ProjectManagerModal({
       ],
       policy: {
         platform: 'custom',
-        policySummary: 'Regras de teste do programa. Não realize testes de DoS/DDoS.',
+        policySummary: 'Regras de teste e auditoria autorizada de cibersegurança MSSP.',
         safeHarbor: true,
-        prohibitedVulns: ['DDoS', 'Self-XSS', 'Social Engineering'],
-        requiredHeaders: [{ key: 'X-Bug-Bounty', value: 'w0rmingstar', description: 'Header de identificação' }],
+        prohibitedVulns: ['DDoS', 'Social Engineering'],
+        requiredHeaders: [{ key: 'X-Nexus-Audit', value: 'recon-correlator-enterprise' }],
         targetArchitecture: 'cloud_native',
-        bountyTiers: [
-          { severity: 'critical', minUsd: 3000, maxUsd: 10000 },
-          { severity: 'high', minUsd: 1000, maxUsd: 3000 },
-          { severity: 'medium', minUsd: 300, maxUsd: 1000 },
-          { severity: 'low', minUsd: 100, maxUsd: 300 },
-        ],
         extractedAt: new Date().toISOString(),
       },
       isDemo: false,
@@ -108,239 +118,287 @@ export function ProjectManagerModal({
     onCreateNewProject(newProj);
     setNewDomain('');
     setNewName('');
+    setNewTradeName('');
+    setNewCnpj('');
     setCustomAccessCode('');
     setIsCreating(false);
   };
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 font-mono animate-in fade-in duration-200">
-      <div className="bg-zinc-950 border border-zinc-800/90 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+      <div className="bg-zinc-950 border border-zinc-800/90 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
         {/* Modal Header */}
         <div className="bg-gradient-to-r from-zinc-900 via-zinc-900 to-zinc-950 border-b border-zinc-800 p-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-950 border border-emerald-700/60 flex items-center justify-center text-emerald-400">
-              <FolderKanban className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-xl bg-emerald-950/80 border border-emerald-800/60 flex items-center justify-center text-emerald-400 shadow-sm">
+              <Building2 className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-zinc-100 text-sm">Gerenciador de Bug Bounties & Chaves de Acesso</h3>
-              <p className="text-[11px] text-zinc-400">Cada programa possui isolamento estrito e código de acesso único</p>
+              <h2 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
+                <span>Gestão de Empresas & Clientes MSSP</span>
+                <span className="text-[10px] bg-zinc-800 text-emerald-400 px-2 py-0.5 rounded-full border border-zinc-700">
+                  {projects.length} Registradas
+                </span>
+              </h2>
+              <p className="text-[11px] text-zinc-400">
+                Isolamento estrito e chaves de segurança por empresa
+              </p>
             </div>
           </div>
-          <button 
-            onClick={onClose} 
-            className="text-zinc-500 hover:text-zinc-200 p-1.5 rounded-lg hover:bg-zinc-900 transition-colors cursor-pointer"
+          <button
+            onClick={onClose}
+            className="text-zinc-400 hover:text-zinc-200 p-1.5 rounded-lg hover:bg-zinc-800 transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Content Body */}
-        <div className="p-5 space-y-4 overflow-y-auto flex-1">
-          {/* Quick Actions Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-zinc-900/60 border border-zinc-800/80 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-zinc-400">Programas Cadastrados:</span>
-              <strong className="text-emerald-400">{projects.length}</strong>
-            </div>
-
+        {/* Modal Body */}
+        <div className="p-5 overflow-y-auto space-y-4 flex-1">
+          {/* Create New Company Button / Form */}
+          {!isCreating ? (
             <button
-              onClick={() => setIsCreating(!isCreating)}
-              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-black rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+              onClick={() => setIsCreating(true)}
+              className="w-full py-3 px-4 border border-dashed border-zinc-700 hover:border-emerald-500/60 rounded-2xl bg-zinc-900/40 hover:bg-zinc-900/80 text-zinc-300 hover:text-emerald-300 text-xs flex items-center justify-center gap-2 transition-all shadow-sm group"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>{isCreating ? 'Fechar Formulário' : 'Novo Bug Bounty Manual'}</span>
+              <Plus className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+              <span className="font-bold">Cadastrar Nova Empresa / Cliente Enterprise</span>
             </button>
-          </div>
-
-          {/* New Project Inline Form */}
-          {isCreating && (
-            <div className="p-4 bg-zinc-900/80 border border-emerald-900/60 rounded-xl space-y-3 animate-in fade-in duration-150">
-              <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Cadastrar Novo Alvo Real de Bug Bounty</span>
-              </span>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                <div>
-                  <label className="text-[10px] text-zinc-400 block mb-1">Domínio Raiz (ex: empresa.com):</label>
-                  <input
-                    type="text"
-                    placeholder="empresa.com"
-                    value={newDomain}
-                    onChange={(e) => setNewDomain(e.target.value)}
-                    className="w-full bg-black border border-zinc-800 rounded-lg px-3 py-2 text-xs text-emerald-400 font-mono focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-zinc-400 block mb-1">Nome da Organização (Opcional):</label>
-                  <input
-                    type="text"
-                    placeholder="Empresa Real Corp"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    className="w-full bg-black border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 font-mono focus:outline-none focus:border-zinc-700"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="text-[10px] text-zinc-400 block mb-1">Código Único de Acesso (Deixe em branco para auto-gerar):</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="ex: BB-MEU-ALVO ou deixe vazio para auto-gerar"
-                      value={customAccessCode}
-                      onChange={(e) => setCustomAccessCode(e.target.value.toUpperCase())}
-                      className="flex-1 bg-black border border-zinc-800 rounded-lg px-3 py-2 text-xs text-amber-300 font-mono uppercase focus:outline-none focus:border-amber-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setCustomAccessCode(generateAccessCode())}
-                      className="px-2.5 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] rounded-lg cursor-pointer"
-                    >
-                      Gerar Código
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div className="flex justify-end gap-2 pt-1">
+          ) : (
+            <div className="p-4 rounded-2xl bg-zinc-900/80 border border-emerald-500/40 space-y-3.5 animate-in fade-in duration-150">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5" />
+                  Dados Corporativos do Cliente
+                </span>
                 <button
                   onClick={() => setIsCreating(false)}
-                  className="px-3 py-1.5 bg-zinc-800 text-zinc-300 rounded-lg text-xs font-bold cursor-pointer"
+                  className="text-[11px] text-zinc-400 hover:text-zinc-200"
+                >
+                  Cancelar
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label className="text-[10px] text-zinc-400 font-bold block mb-1 uppercase">
+                    Razão Social (Legal Name) *
+                  </label>
+                  <input
+                    type="text"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="Ex: Banco Global S.A."
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-zinc-400 font-bold block mb-1 uppercase">
+                    Nome Fantasia (Trade Name)
+                  </label>
+                  <input
+                    type="text"
+                    value={newTradeName}
+                    onChange={(e) => setNewTradeName(e.target.value)}
+                    placeholder="Ex: Global Bank"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-zinc-400 font-bold block mb-1 uppercase">
+                    Domínio Principal *
+                  </label>
+                  <input
+                    type="text"
+                    value={newDomain}
+                    onChange={(e) => setNewDomain(e.target.value)}
+                    placeholder="ex: globalbank.com.br"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-emerald-400 placeholder-zinc-600 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-zinc-400 font-bold block mb-1 uppercase">
+                    CNPJ / Tax ID
+                  </label>
+                  <input
+                    type="text"
+                    value={newCnpj}
+                    onChange={(e) => setNewCnpj(e.target.value)}
+                    placeholder="00.000.000/0001-00"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-zinc-400 font-bold block mb-1 uppercase">
+                    Setor Econômico
+                  </label>
+                  <select
+                    value={newIndustry}
+                    onChange={(e) => setNewIndustry(e.target.value as IndustrySector)}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-white focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="fintech">Fintech & Banking</option>
+                    <option value="health_pharma">Saúde & Farmacêutica</option>
+                    <option value="ecommerce">E-Commerce & Varejo</option>
+                    <option value="saas_cloud">SaaS & Cloud Provider</option>
+                    <option value="government">Governo & Setor Público</option>
+                    <option value="energy_utilities">Energia & Utilities</option>
+                    <option value="defense_aerospace">Defesa & Aeroespacial</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-zinc-400 font-bold block mb-1 uppercase">
+                    Nível de Atendimento & SLA
+                  </label>
+                  <select
+                    value={newTier}
+                    onChange={(e) => setNewTier(e.target.value as EnterpriseTier)}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-white focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="tier1_mission_critical">Tier 1 Mission-Critical (24/7 SOC)</option>
+                    <option value="tier2_enterprise">Tier 2 Enterprise (4h Response)</option>
+                    <option value="tier3_retainer">Tier 3 Retainer (12h Standard)</option>
+                    <option value="incident_response">Resposta a Incidentes Dedicada</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-zinc-400 font-bold block mb-1 uppercase">
+                  Código de Acesso Personalizado (Opcional)
+                </label>
+                <input
+                  type="text"
+                  value={customAccessCode}
+                  onChange={(e) => setCustomAccessCode(e.target.value)}
+                  placeholder="Ex: NEXUS-GB-2026 (Deixe vazio para gerar aleatório)"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-amber-300 uppercase placeholder-zinc-600 focus:outline-none focus:border-amber-500 font-mono text-xs font-bold"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCreating(false)}
+                  className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold"
                 >
                   Cancelar
                 </button>
                 <button
+                  type="button"
                   onClick={handleCreate}
                   disabled={!newDomain.trim()}
-                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-black font-bold rounded-lg text-xs transition-colors cursor-pointer"
+                  className="px-4 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Criar e Ativar
+                  Salvar e Criar Empresa
                 </button>
               </div>
             </div>
           )}
 
-          {/* Projects List */}
-          <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+          {/* Companies List */}
+          <div className="space-y-2.5">
+            <h3 className="text-[11px] uppercase tracking-wider text-zinc-400 font-bold flex items-center justify-between">
+              <span>Empresas Ativas</span>
+              <span className="text-zinc-500">{projects.length} Total</span>
+            </h3>
+
             {projects.length === 0 ? (
-              <div className="p-8 text-center bg-zinc-900/30 border border-zinc-800/60 rounded-xl space-y-2">
-                <AlertTriangle className="w-8 h-8 text-zinc-500 mx-auto" />
-                <p className="text-xs text-zinc-300 font-bold">Nenhum programa de Bug Bounty cadastrado.</p>
-                <p className="text-[11px] text-zinc-500">Crie seu primeiro alvo acima para começar do zero com segurança total.</p>
+              <div className="p-8 text-center border border-zinc-800/80 rounded-2xl bg-zinc-900/30 text-zinc-500 text-xs">
+                Nenhuma empresa cadastrada no momento.
               </div>
             ) : (
-              projects.map((project) => {
-                const isSelected = currentProject?.id === project.id;
-                const isConfirmingDelete = deleteConfirmId === project.id;
-                const isCopied = copiedCodeId === project.id;
+              projects.map(p => {
+                const isSelected = currentProject?.id === p.id;
+                const isDeleting = deleteConfirmId === p.id;
 
                 return (
                   <div
-                    key={project.id}
-                    className={`p-3.5 rounded-xl border transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-3 ${
-                      isSelected
-                        ? 'bg-emerald-950/30 border-emerald-600/80 shadow-md ring-1 ring-emerald-500/20'
-                        : 'bg-zinc-900/40 border-zinc-800/80 hover:bg-zinc-900/80 hover:border-zinc-700'
+                    key={p.id}
+                    onClick={() => {
+                      onSelectProject(p);
+                      onClose();
+                    }}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-wrap items-center justify-between gap-3 ${
+                      isSelected 
+                        ? 'bg-emerald-950/30 border-emerald-500/50 shadow-md ring-1 ring-emerald-500/20' 
+                        : 'bg-zinc-900/50 hover:bg-zinc-900/90 border-zinc-800/80 hover:border-zinc-700'
                     }`}
                   >
-                    <div 
-                      onClick={() => {
-                        onSelectProject(project);
-                        onClose();
-                      }}
-                      className="flex-1 flex items-start gap-3 cursor-pointer"
-                    >
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
-                        isSelected 
-                          ? 'bg-emerald-600 text-black font-bold' 
-                          : 'bg-zinc-800 text-zinc-400'
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs ${
+                        isSelected ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-zinc-800 text-zinc-400'
                       }`}>
-                        <Globe className="w-4 h-4" />
+                        {p.name.substring(0, 2).toUpperCase()}
                       </div>
 
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-bold text-zinc-100 text-xs">{project.name}</span>
-                          <span className="text-[10px] text-emerald-400 font-mono font-bold">({project.domain})</span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white text-xs">{p.name}</span>
                           {isSelected && (
-                            <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-emerald-600 text-black font-bold">
-                              ATIVO
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[9px] font-bold border border-emerald-500/30 uppercase">
+                              Ativa
                             </span>
                           )}
-                        </div>
-
-                        {/* Access Code Pill */}
-                        <div className="flex items-center gap-2 pt-0.5">
-                          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-black border border-amber-800/60 text-amber-300 text-[10px] font-mono">
-                            <Key className="w-3 h-3 text-amber-400" />
-                            <span>Código: <strong>{project.accessCode || 'N/A'}</strong></span>
-                            <button
-                              onClick={(e) => handleCopyCode(project, e)}
-                              className="ml-1 text-zinc-400 hover:text-amber-200 transition-colors cursor-pointer"
-                              title="Copiar Código de Acesso Único"
-                            >
-                              {isCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                            </button>
-                          </div>
-                          <span className="text-[10px] text-zinc-500">
-                            {new Date(project.createdAt).toLocaleDateString()}
+                          <span className="text-[10px] text-zinc-500 bg-zinc-800/60 px-1.5 py-0.5 rounded">
+                            {p.industry || 'Fintech'}
                           </span>
                         </div>
+                        <p className="text-[11px] text-zinc-400 flex items-center gap-2 mt-0.5">
+                          <span>🌐 {p.domain}</span>
+                          {p.cnpjOrTaxId && <span>• 📄 {p.cnpjOrTaxId}</span>}
+                        </p>
                       </div>
                     </div>
 
-                    {/* Delete / Action area */}
-                    <div className="flex items-center gap-2 self-end md:self-center shrink-0">
-                      {isConfirmingDelete ? (
-                        <div className="flex items-center gap-1.5 bg-red-950 border border-red-800 rounded-lg p-1">
-                          <span className="text-[10px] text-red-300 font-bold px-1">Excluir?</span>
+                    <div className="flex items-center gap-2">
+                      {/* Copy Access Code */}
+                      <button
+                        onClick={(e) => handleCopyCode(p, e)}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-zinc-950 border border-amber-800/60 text-amber-300 text-[11px] hover:border-amber-500 transition-colors"
+                        title="Copiar Código Único de Acesso"
+                      >
+                        <Key className="w-3 h-3 text-amber-400" />
+                        <span className="font-bold font-mono">{p.accessCode}</span>
+                        {copiedCodeId === p.id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-zinc-400" />}
+                      </button>
+
+                      {/* Delete Action */}
+                      {isDeleting ? (
+                        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                           <button
                             onClick={() => {
-                              onDeleteProject(project.id);
+                              onDeleteProject(p.id);
                               setDeleteConfirmId(null);
                             }}
-                            className="px-2 py-0.5 bg-red-600 hover:bg-red-500 text-white rounded text-[10px] font-bold cursor-pointer transition-colors"
+                            className="px-2 py-1 bg-rose-600 text-white text-[10px] font-bold rounded-lg hover:bg-rose-500"
                           >
-                            Sim
+                            Confirmar Exclusão
                           </button>
                           <button
                             onClick={() => setDeleteConfirmId(null)}
-                            className="px-2 py-0.5 bg-zinc-800 text-zinc-300 rounded text-[10px] cursor-pointer"
+                            className="px-2 py-1 bg-zinc-800 text-zinc-300 text-[10px] rounded-lg"
                           >
-                            Não
+                            Cancelar
                           </button>
                         </div>
                       ) : (
                         <button
-                          onClick={() => setDeleteConfirmId(project.id)}
-                          className="p-2 text-zinc-500 hover:text-red-400 hover:bg-red-950/40 rounded-lg transition-colors cursor-pointer"
-                          title="Excluir este programa e todos os seus dados"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteConfirmId(p.id);
+                          }}
+                          className="p-1.5 text-zinc-500 hover:text-rose-400 rounded-lg hover:bg-rose-950/40 transition-colors"
+                          title="Remover Empresa"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       )}
-
-                      <button
-                        onClick={() => {
-                          onSelectProject(project);
-                          onClose();
-                        }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-emerald-600 text-black'
-                            : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200'
-                        }`}
-                      >
-                        {isSelected ? (
-                          <>
-                            <Check className="w-3.5 h-3.5" />
-                            <span>Desbloqueado</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>Entrar</span>
-                            <ArrowRight className="w-3 h-3" />
-                          </>
-                        )}
-                      </button>
                     </div>
                   </div>
                 );
@@ -350,14 +408,11 @@ export function ProjectManagerModal({
         </div>
 
         {/* Modal Footer */}
-        <div className="bg-zinc-900/90 border-t border-zinc-800 p-3.5 flex justify-between items-center text-xs">
-          <span className="text-[11px] text-zinc-400 flex items-center gap-1">
-            <Lock className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Isolamento Estrito Ativo: Nenhum dado é compartilhado entre bounties.</span>
-          </span>
+        <div className="p-4 bg-zinc-950 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-500">
+          <span>🔒 Todos os dados são criptografados com AES-256-GCM no Vault</span>
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg font-bold transition-colors cursor-pointer"
+            className="px-4 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold"
           >
             Fechar
           </button>

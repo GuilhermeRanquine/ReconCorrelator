@@ -1,25 +1,20 @@
-import type {Metadata} from 'next';
-import './globals.css'; // Global styles
+import type { Metadata } from 'next';
+import './globals.css';
+import { ThemeProvider } from '@/components/ThemeContext';
 
 export const metadata: Metadata = {
-  title: 'My Google AI Studio App',
-  description: 'An application built with Google AI Studio.',
-  openGraph: {
-    title: 'My Google AI Studio App',
-    description: 'An application built with Google AI Studio.',
-    type: 'website',
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'My Google AI Studio App',
-    description: 'An application built with Google AI Studio.',
-  },
+  title: 'ReconCorrelator Nexus | Enterprise MSSP & Cyber Threat Intelligence Platform',
+  description: 'Plataforma soberana de inteligência cibernética ofensiva, correlação de ativos e gestão contínua de superfície de ataque (ASM) com cofre criptografado militar.',
 };
 
-export default function RootLayout({children}: {children: React.ReactNode}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body suppressHydrationWarning>{children}</body>
+    <html lang="pt-BR">
+      <body suppressHydrationWarning className="antialiased min-h-screen">
+        <ThemeProvider>
+          {children}
+        </ThemeProvider>
+      </body>
     </html>
   );
 }
