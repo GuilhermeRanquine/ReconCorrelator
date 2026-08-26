@@ -18,6 +18,7 @@ import { ScopeManagerModal } from '@/components/ScopeManagerModal';
 import { AiTriagerModal } from '@/components/AiTriagerModal';
 import { ExportModal } from '@/components/ExportModal';
 import { ProjectManagerModal } from '@/components/ProjectManagerModal';
+import { AccountSettingsModal } from '@/components/AccountSettingsModal';
 
 import { 
   ShieldAlert, 
@@ -28,31 +29,31 @@ import {
   Plus, 
   Download, 
   Sparkles, 
-  Database,
-  Radio,
-  FileCheck,
-  AlertTriangle,
-  Globe,
-  Server,
-  Layers,
-  ArrowUpRight,
-  Flame,
-  Zap,
-  GitBranch,
-  Search,
-  Trash2,
-  Play,
-  ShieldCheck,
-  Lock,
-  Unlock,
-  Key,
-  HardDrive,
-  FolderKanban,
-  Check,
-  Copy,
-  ArrowRight,
+  Database, 
+  Radio, 
+  FileCheck, 
+  AlertTriangle, 
+  Globe, 
+  Server, 
+  Layers, 
+  ArrowUpRight, 
+  Flame, 
+  Zap, 
+  GitBranch, 
+  Search, 
+  Trash2, 
+  Play, 
+  ShieldCheck, 
+  Lock, 
+  Unlock, 
+  Key, 
+  HardDrive, 
+  FolderKanban, 
+  Check, 
+  Copy, 
+  ArrowRight, 
   Loader2
-} from 'lucide-react';
+} from '@/lib/icons';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -81,6 +82,7 @@ export default function DashboardPage() {
   const [isScopeOpen, setIsScopeOpen] = useState(false);
   const [isAiTriageOpen, setIsAiTriageOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [selectedAssetForAi, setSelectedAssetForAi] = useState<CorrelatedAsset | null>(null);
 
   // -------------------------------------------------------------
@@ -351,6 +353,7 @@ export default function DashboardPage() {
         projects={projects}
         currentUser={currentUser}
         onLogout={handleLogout}
+        onOpenSettings={() => setIsSettingsOpen(true)}
         onSelectProject={handleSelectProject}
         onLockBounty={handleLockBounty}
         onOpenIngestion={() => setIsIngestionOpen(true)}
@@ -729,6 +732,15 @@ export default function DashboardPage() {
           onClose={() => setIsExportOpen(false)}
           assets={assets}
           target={currentProject}
+        />
+      )}
+
+      {isSettingsOpen && (
+        <AccountSettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          currentUser={currentUser}
+          onLogout={handleLogout}
         />
       )}
     </div>

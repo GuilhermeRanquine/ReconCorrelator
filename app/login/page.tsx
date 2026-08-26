@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LoginScreen } from '@/components/LoginScreen';
-import { Loader2, ShieldCheck } from 'lucide-react';
+import { Loader2, ShieldCheck } from '@/lib/icons';
 
 export default function LoginPage() {
   const router = useRouter();

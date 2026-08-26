@@ -15,7 +15,7 @@ import {
   Layers, 
   Clock,
   RotateCcw
-} from 'lucide-react';
+} from '@/lib/icons';
 
 export function TddTestCenter() {
   const [suites, setSuites] = useState<TddSuite[]>([]);

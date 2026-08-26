@@ -24,8 +24,9 @@ import {
   ArrowRightLeft,
   User as UserIcon,
   LogOut,
-  ShieldCheck
-} from 'lucide-react';
+  ShieldCheck,
+  Settings
+} from '@/lib/icons';
 
 export type ReconTab = 'dashboard' | 'terminal' | 'flowchart' | 'workbench' | 'graph' | 'assets' | 'pipeline' | 'tdd' | 'drive';
 
@@ -34,6 +35,7 @@ interface HeaderProps {
   projects: TargetProject[];
   currentUser?: { id: string; username: string; role: string } | null;
   onLogout?: () => void;
+  onOpenSettings?: () => void;
   onSelectProject: (project: TargetProject) => void;
   onLockBounty: () => void;
   onOpenIngestion: () => void;
@@ -58,6 +60,7 @@ export function Header({
   projects,
   currentUser,
   onLogout,
+  onOpenSettings,
   onSelectProject,
   onLockBounty,
   onOpenIngestion,
@@ -190,22 +193,36 @@ export function Header({
             <span>Novo Bug Bounty</span>
           </button>
 
-          {/* User Profile & Logout (iOS Pill) */}
-          {currentUser && onLogout && (
-            <div className="flex items-center gap-1.5 pl-2 border-l border-zinc-800">
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900/60 border border-zinc-800 text-xs text-zinc-300">
+          {/* User Profile, Settings & Logout */}
+          <div className="flex items-center gap-1.5 pl-2 border-l border-zinc-800">
+            {currentUser && onOpenSettings ? (
+              <button
+                onClick={onOpenSettings}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-900/60 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-xs text-zinc-300 transition-colors cursor-pointer"
+                title="Configurações da Conta"
+              >
+                <UserIcon className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="font-semibold text-zinc-200">{currentUser.username}</span>
+                <Settings className="w-3 h-3 text-zinc-400 ml-0.5" />
+              </button>
+            ) : currentUser ? (
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-900/60 border border-zinc-800 text-xs text-zinc-300">
                 <UserIcon className="w-3.5 h-3.5 text-emerald-400" />
                 <span className="font-semibold text-zinc-200">{currentUser.username}</span>
               </div>
+            ) : null}
+
+            {onLogout && (
               <button
                 onClick={onLogout}
-                className="p-1.5 rounded-xl bg-zinc-900/60 hover:bg-red-950/60 border border-zinc-800 hover:border-red-800/80 text-zinc-400 hover:text-red-300 transition-colors cursor-pointer active:scale-[0.98]"
-                title="Encerrar Sessão Segura"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-red-950/40 hover:bg-red-900/60 border border-red-800/60 hover:border-red-700 text-red-300 hover:text-red-200 text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-[0.98]"
+                title="Sair do Sistema e Encerrar Sessão"
               >
                 <LogOut className="w-3.5 h-3.5" />
+                <span>Sair</span>
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
