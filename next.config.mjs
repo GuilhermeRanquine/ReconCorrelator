@@ -25,17 +25,6 @@ const nextConfig = {
   },
   transpilePackages: ['motion'],
   webpack: (config, { dev }) => {
-    const vendorModules = path.resolve('C:/Users/ranquine/.recon_correlator_vendor/node_modules');
-    config.resolve.modules = [
-      vendorModules,
-      ...(config.resolve.modules || ['node_modules']),
-    ];
-    config.resolveLoader = config.resolveLoader || {};
-    config.resolveLoader.modules = [
-      vendorModules,
-      ...(config.resolveLoader.modules || ['node_modules']),
-    ];
-
     config.resolve.alias = {
       ...config.resolve.alias,
       '@': path.resolve(__dirname),
