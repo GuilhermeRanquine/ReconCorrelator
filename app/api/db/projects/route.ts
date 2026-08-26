@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProjects, saveProject, deleteProject, getProjectById } from '@/lib/db';
-import { TargetProject } from '@/types/recon';
+import { getProjects, saveProject, deleteProject, getProjectById, getProjectByAccessCode } from '@/lib/db';
+import { TargetProject, generateAccessCode } from '@/types/recon';
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
+    const accessCode = searchParams.get('accessCode');
+
+    if (accessCode) {
+      const project = await getProjectByAccessCode(accessCode);
+      if (!project) {
+        return NextResponse.json({ success: false, error: 'Código de Acesso inválido ou não encontrado' }, { status: 404 });
+      }
+      return NextResponse.json({ success: true, project });
+    }
 
     if (id) {
       const project = await getProjectById(id);
@@ -16,7 +25,7 @@ export async function GET(req: NextRequest) {
     }
 
     const projects = await getProjects();
-    return NextResponse.json({ success: true, projects });
+    return NextResponse.json({ success: true, count: projects.length, projects });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
@@ -31,6 +40,11 @@ export async function POST(req: NextRequest) {
 
     if (!project.id) {
       project.id = `proj-${Date.now()}`;
+    }
+    if (!project.accessCode) {
+      project.accessCode = generateAccessCode();
+    } else {
+      project.accessCode = project.accessCode.trim().toUpperCase();
     }
     if (!project.createdAt) {
       project.createdAt = new Date().toISOString();

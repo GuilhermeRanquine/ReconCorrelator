@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
-import { BugBountyPolicy, TargetProject, ScopeRule } from '@/types/recon';
+import { BugBountyPolicy, TargetProject, ScopeRule, generateAccessCode } from '@/types/recon';
 
 function getAiClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
@@ -189,6 +189,7 @@ Extraia todas as informações no formato JSON rigoroso. Se o texto for curto ou
       id: `target-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       name: parsedJson.name || parsedJson.domain,
       domain: parsedJson.domain.replace(/^https?:\/\//, '').replace(/\/.*$/, '').toLowerCase(),
+      accessCode: generateAccessCode(),
       description: parsedJson.description || `Superfície de ataque de ${parsedJson.name}`,
       createdAt: new Date().toISOString(),
       platform: policy.platform,

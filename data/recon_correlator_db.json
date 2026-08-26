@@ -1,60 +1,20 @@
 {
-  "version": 1,
-  "lastUpdated": "2026-08-26T03:47:39.308Z",
-  "projects": [
-    {
-      "id": "test-proj-1",
-      "name": "Alvo Teste",
-      "domain": "testtarget.com",
-      "inScope": [
-        "*.testtarget.com"
-      ],
-      "outOfScope": []
-    }
-  ],
-  "assets": [
-    {
-      "id": "asset-1",
-      "subdomain": "api.testtarget.com",
-      "rootDomain": "testtarget.com",
-      "isAlive": true,
-      "ports": [],
-      "vulnerabilities": []
-    }
-  ],
-  "reconCache": [
-    {
-      "id": "cache-test-1",
-      "tool": "crtsh",
-      "target": "testtarget.com",
-      "paramsHash": "default",
-      "data": {
-        "subdomains": [
-          "api.testtarget.com",
-          "auth.testtarget.com",
-          "admin.testtarget.com"
-        ]
-      },
-      "cachedAt": "2026-08-26T03:47:39.434Z",
-      "expiresAt": "2026-08-26T04:47:39.434Z"
-    },
-    {
-      "id": "cache-test-1",
-      "tool": "crtsh",
-      "target": "testtarget.com",
-      "paramsHash": "default",
-      "data": {
-        "subdomains": [
-          "api.testtarget.com",
-          "auth.testtarget.com",
-          "admin.testtarget.com"
-        ]
-      },
-      "cachedAt": "2026-08-26T03:48:53.781Z",
-      "expiresAt": "2026-08-26T04:48:53.782Z"
-    }
-  ],
+  "version": 2,
+  "lastUpdated": "2026-08-26T04:40:00.000Z",
+  "projects": [],
+  "assets": [],
+  "reconCache": [],
   "terminalSessions": [],
   "terminalFolders": [],
-  "reports": []
+  "reports": [],
+  "auditLogs": [
+    {
+      "id": "audit-clean-slate",
+      "timestamp": "2026-08-26T04:40:00.000Z",
+      "action": "DB_CLEAN_SLATE_RESET",
+      "details": {
+        "message": "Base de dados resetada com sucesso. Zero dados de exemplo e suporte a códigos únicos de acesso ativo."
+      }
+    }
+  ]
 }

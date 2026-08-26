@@ -1,12 +1,12 @@
 import fs from 'fs';
 import path from 'path';
-import { TargetProject, CorrelatedAsset, Vulnerability } from '@/types/recon';
-import { SAMPLE_PROJECTS, SAMPLE_ASSETS } from '@/lib/sampleData';
+import { TargetProject, CorrelatedAsset, Vulnerability, generateAccessCode } from '@/types/recon';
 
 export interface ReconCacheEntry {
   id: string;
   tool: string;
   target: string;
+  targetId?: string;
   paramsHash: string;
   data: any;
   cachedAt: string;
@@ -44,6 +44,7 @@ export interface ReportEntry {
   filename: string;
   content: string;
   targetDomain?: string;
+  targetId?: string;
   createdAt: string;
   author?: string;
 }
@@ -75,27 +76,23 @@ function ensureDbDir() {
   }
 }
 
-// Initial seed
+// Initial clean zero-state
 function getInitialDbState(): DatabaseSchema {
   return {
-    version: 1,
+    version: 2,
     lastUpdated: new Date().toISOString(),
-    projects: SAMPLE_PROJECTS,
-    assets: SAMPLE_ASSETS,
+    projects: [],
+    assets: [],
     reconCache: [],
     terminalSessions: [],
-    terminalFolders: [
-      { id: 'recon-osint', name: 'Recon & OSINT', isOpen: true },
-      { id: 'vuln-scans', name: 'Auditoria & Takeovers', isOpen: true },
-      { id: 'ai-chats', name: 'AI Red Team Prompts', isOpen: true },
-    ],
+    terminalFolders: [],
     reports: [],
     auditLogs: [
       {
         id: `audit-${Date.now()}`,
         timestamp: new Date().toISOString(),
-        action: 'DB_INITIALIZATION',
-        details: { message: 'Banco de dados ReconCorrelator inicializado com sucesso.' },
+        action: 'DB_CLEAN_SLATE_INITIALIZED',
+        details: { message: 'Banco de dados ReconCorrelator inicializado limpo e zerado com isolamento por código de acesso.' },
       },
     ],
   };
@@ -123,10 +120,10 @@ export async function readDb(): Promise<DatabaseSchema> {
     }
     const parsed = JSON.parse(content) as DatabaseSchema;
     if (!parsed.projects || !Array.isArray(parsed.projects)) {
-      parsed.projects = SAMPLE_PROJECTS;
+      parsed.projects = [];
     }
     if (!parsed.assets || !Array.isArray(parsed.assets)) {
-      parsed.assets = SAMPLE_ASSETS;
+      parsed.assets = [];
     }
     if (!parsed.reconCache || !Array.isArray(parsed.reconCache)) {
       parsed.reconCache = [];
@@ -140,9 +137,22 @@ export async function readDb(): Promise<DatabaseSchema> {
     if (!parsed.reports || !Array.isArray(parsed.reports)) {
       parsed.reports = [];
     }
+
+    // Ensure all existing projects have an access code
+    let mutated = false;
+    for (const p of parsed.projects) {
+      if (!p.accessCode) {
+        p.accessCode = generateAccessCode();
+        mutated = true;
+      }
+    }
+    if (mutated) {
+      await writeDb(parsed);
+    }
+
     return parsed;
   } catch (err) {
-    console.error('Error reading database, restoring baseline:', err);
+    console.error('Error reading database, restoring pristine baseline:', err);
     const initialState = getInitialDbState();
     await writeDb(initialState);
     return initialState;
@@ -175,11 +185,15 @@ export async function writeDb(data: DatabaseSchema): Promise<void> {
 }
 
 // ----------------------------------------------------
-// 📁 PROJECT OPERATIONS
+// 📁 PROJECT & BOUNTY OPERATIONS (Strict Access Code Isolation)
 // ----------------------------------------------------
 
-export async function getProjects(): Promise<TargetProject[]> {
+export async function getProjects(accessCode?: string): Promise<TargetProject[]> {
   const db = await readDb();
+  if (accessCode) {
+    const cleanCode = accessCode.trim().toUpperCase();
+    return db.projects.filter(p => p.accessCode?.toUpperCase() === cleanCode);
+  }
   return db.projects;
 }
 
@@ -188,8 +202,28 @@ export async function getProjectById(id: string): Promise<TargetProject | null> 
   return db.projects.find(p => p.id === id) || null;
 }
 
+export async function getProjectByAccessCode(accessCode: string): Promise<TargetProject | null> {
+  const db = await readDb();
+  const cleanCode = accessCode.trim().toUpperCase();
+  return db.projects.find(p => p.accessCode?.toUpperCase() === cleanCode) || null;
+}
+
 export async function saveProject(project: TargetProject): Promise<TargetProject[]> {
   const db = await readDb();
+  
+  // Ensure accessCode is present and uppercase
+  if (!project.accessCode) {
+    project.accessCode = generateAccessCode();
+  } else {
+    project.accessCode = project.accessCode.trim().toUpperCase();
+  }
+
+  // Ensure unique accessCode among other projects
+  const existingWithCode = db.projects.find(p => p.id !== project.id && p.accessCode?.toUpperCase() === project.accessCode.toUpperCase());
+  if (existingWithCode) {
+    project.accessCode = generateAccessCode();
+  }
+
   const index = db.projects.findIndex(p => p.id === project.id);
   if (index >= 0) {
     db.projects[index] = project;
@@ -204,31 +238,69 @@ export async function deleteProject(id: string): Promise<{ remaining: TargetProj
   const db = await readDb();
   const projToDelete = db.projects.find(p => p.id === id);
   db.projects = db.projects.filter(p => p.id !== id);
+  
   if (projToDelete) {
-    // Also clean up or unlink assets for deleted project if applicable
-    db.assets = db.assets.filter(a => a.rootDomain !== projToDelete.domain);
+    // Completely wipe all isolated data for this project
+    db.assets = db.assets.filter(a => a.projectId !== id && a.rootDomain !== projToDelete.domain);
     db.terminalSessions = db.terminalSessions.filter(s => s.targetId !== id);
+    db.terminalFolders = db.terminalFolders.filter(f => f.targetId !== id);
+    db.reconCache = db.reconCache.filter(c => c.targetId !== id && c.target !== projToDelete.domain);
+    db.reports = db.reports.filter(r => r.targetId !== id && r.targetDomain !== projToDelete.domain);
   }
+  
   await writeDb(db);
   return { remaining: db.projects };
 }
 
 // ----------------------------------------------------
-// 🎯 ASSET OPERATIONS (Deduplication & Smart Upsert)
+// 🎯 ASSET OPERATIONS (Strict Isolation by Project / Domain)
 // ----------------------------------------------------
 
-export async function getAssets(filter?: { rootDomain?: string; projectId?: string }): Promise<CorrelatedAsset[]> {
+export async function getAssets(filter?: { rootDomain?: string; projectId?: string; accessCode?: string }): Promise<CorrelatedAsset[]> {
   const db = await readDb();
+  
+  if (filter?.projectId) {
+    const pid = filter.projectId;
+    const project = db.projects.find(p => p.id === pid);
+    const domain = project?.domain.toLowerCase().trim();
+    
+    return db.assets.filter(a => {
+      if (a.projectId && a.projectId === pid) return true;
+      if (domain && (a.rootDomain.toLowerCase() === domain || a.subdomain.toLowerCase().endsWith(`.${domain}`))) {
+        return true;
+      }
+      return false;
+    });
+  }
+
+  if (filter?.accessCode) {
+    const cleanCode = filter.accessCode.trim().toUpperCase();
+    const project = db.projects.find(p => p.accessCode?.toUpperCase() === cleanCode);
+    if (!project) return [];
+    
+    const domain = project.domain.toLowerCase().trim();
+    return db.assets.filter(a => {
+      if (a.projectId && a.projectId === project.id) return true;
+      if (a.accessCode && a.accessCode.toUpperCase() === cleanCode) return true;
+      if (a.rootDomain.toLowerCase() === domain || a.subdomain.toLowerCase().endsWith(`.${domain}`)) {
+        return true;
+      }
+      return false;
+    });
+  }
+
   if (filter?.rootDomain) {
     const root = filter.rootDomain.toLowerCase().trim();
     return db.assets.filter(a => a.rootDomain.toLowerCase() === root || a.subdomain.toLowerCase().endsWith(`.${root}`));
   }
+
   return db.assets;
 }
 
 export async function upsertAssets(
   newStubs: Partial<CorrelatedAsset>[],
-  defaultRootDomain: string = 'target.com'
+  defaultRootDomain: string = 'target.com',
+  projectId?: string
 ): Promise<CorrelatedAsset[]> {
   const db = await readDb();
   const assetMap = new Map<string, CorrelatedAsset>();
@@ -267,6 +339,7 @@ export async function upsertAssets(
 
       assetMap.set(key, {
         ...existing,
+        projectId: stub.projectId || existing.projectId || projectId,
         isAlive: stub.isAlive !== undefined ? stub.isAlive : existing.isAlive,
         httpStatus: stub.httpStatus ?? existing.httpStatus,
         httpTitle: stub.httpTitle || existing.httpTitle,
@@ -289,6 +362,7 @@ export async function upsertAssets(
       // Create new clean asset entry
       const newAsset: CorrelatedAsset = {
         id: stub.id || `asset-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        projectId: stub.projectId || projectId,
         subdomain: stub.subdomain.trim(),
         rootDomain: stub.rootDomain || defaultRootDomain,
         isAlive: stub.isAlive ?? false,
@@ -322,9 +396,11 @@ export async function upsertAssets(
   return db.assets;
 }
 
-export async function clearAssets(rootDomain?: string): Promise<void> {
+export async function clearAssets(rootDomain?: string, projectId?: string): Promise<void> {
   const db = await readDb();
-  if (rootDomain) {
+  if (projectId) {
+    db.assets = db.assets.filter(a => a.projectId !== projectId);
+  } else if (rootDomain) {
     const root = rootDomain.toLowerCase().trim();
     db.assets = db.assets.filter(a => a.rootDomain.toLowerCase() !== root);
   } else {
@@ -337,17 +413,22 @@ export async function clearAssets(rootDomain?: string): Promise<void> {
 // ⚡ RECON SCRIPT CACHE & FAST RESULT DISPATCHER
 // ----------------------------------------------------
 
-/**
- * Checks if a tool run exists in cache for the target
- */
-export async function getReconCache(tool: string, target: string, paramsHash: string = 'default'): Promise<any | null> {
+export async function getReconCache(
+  tool: string,
+  target: string,
+  paramsHash: string = 'default',
+  targetId?: string
+): Promise<any | null> {
   const db = await readDb();
   const cleanTarget = target.toLowerCase().trim();
   const now = new Date().getTime();
 
-  const entry = db.reconCache.find(
-    c => c.tool === tool && c.target.toLowerCase() === cleanTarget && c.paramsHash === paramsHash
-  );
+  const entry = db.reconCache.find(c => {
+    const matchTool = c.tool === tool && c.paramsHash === paramsHash;
+    const matchTarget = c.target.toLowerCase() === cleanTarget;
+    const matchTargetId = targetId ? c.targetId === targetId : true;
+    return matchTool && matchTarget && matchTargetId;
+  });
 
   if (entry) {
     const expTime = new Date(entry.expiresAt).getTime();
@@ -358,29 +439,28 @@ export async function getReconCache(tool: string, target: string, paramsHash: st
   return null;
 }
 
-/**
- * Saves tool execution results into database cache with TTL (Default: 24h)
- */
 export async function setReconCache(
   tool: string,
   target: string,
   data: any,
   ttlSeconds: number = 86400,
-  paramsHash: string = 'default'
+  paramsHash: string = 'default',
+  targetId?: string
 ): Promise<void> {
   const db = await readDb();
   const cleanTarget = target.toLowerCase().trim();
   const cachedAt = new Date().toISOString();
   const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
 
-  const existingIdx = db.reconCache.findIndex(
-    c => c.tool === tool && c.target.toLowerCase() === cleanTarget && c.paramsHash === paramsHash
-  );
+  const existingIdx = db.reconCache.findIndex(c => {
+    return c.tool === tool && c.target.toLowerCase() === cleanTarget && c.paramsHash === paramsHash;
+  });
 
   const cacheEntry: ReconCacheEntry = {
     id: `cache-${tool}-${Date.now()}`,
     tool,
     target: cleanTarget,
+    targetId,
     paramsHash,
     data,
     cachedAt,
@@ -393,7 +473,6 @@ export async function setReconCache(
     db.reconCache.push(cacheEntry);
   }
 
-  // Keep cache to last 500 items max
   if (db.reconCache.length > 500) {
     db.reconCache = db.reconCache.slice(-500);
   }
@@ -402,13 +481,23 @@ export async function setReconCache(
 }
 
 // ----------------------------------------------------
-// 💻 TERMINAL SESSIONS & FOLDERS PERSISTENCE
+// 💻 TERMINAL SESSIONS & FOLDERS PERSISTENCE (Strict Isolation)
 // ----------------------------------------------------
 
 export async function getTerminalState(targetId: string) {
   const db = await readDb();
-  const folders = db.terminalFolders.filter(f => !f.targetId || f.targetId === targetId);
-  const sessions = db.terminalSessions.filter(s => !s.targetId || s.targetId === targetId);
+  
+  // Default folders if target has none
+  let folders = db.terminalFolders.filter(f => f.targetId === targetId);
+  if (folders.length === 0) {
+    folders = [
+      { id: `folder-recon-${targetId}`, name: 'Recon & OSINT', targetId, isOpen: true },
+      { id: `folder-vulns-${targetId}`, name: 'Auditoria & Takeovers', targetId, isOpen: true },
+      { id: `folder-ai-${targetId}`, name: 'AI Red Team Prompts', targetId, isOpen: true },
+    ];
+  }
+
+  const sessions = db.terminalSessions.filter(s => s.targetId === targetId);
   return { folders, sessions };
 }
 
@@ -419,28 +508,34 @@ export async function saveTerminalState(
 ) {
   const db = await readDb();
 
-  // Update folders for this target
-  const otherFolders = db.terminalFolders.filter(f => f.targetId && f.targetId !== targetId);
+  // Replace folders for this specific target
+  const otherFolders = db.terminalFolders.filter(f => f.targetId !== targetId);
   const taggedFolders = folders.map(f => ({ ...f, targetId }));
   db.terminalFolders = [...otherFolders, ...taggedFolders];
 
-  // Update sessions for this target
-  const otherSessions = db.terminalSessions.filter(s => s.targetId && s.targetId !== targetId);
+  // Replace sessions for this specific target
+  const otherSessions = db.terminalSessions.filter(s => s.targetId !== targetId);
   const taggedSessions = sessions.map(s => ({ ...s, targetId }));
   db.terminalSessions = [...otherSessions, ...taggedSessions];
 
   await writeDb(db);
-  return { folders: db.terminalFolders, sessions: db.terminalSessions };
+  return { 
+    folders: db.terminalFolders.filter(f => f.targetId === targetId), 
+    sessions: db.terminalSessions.filter(s => s.targetId === targetId) 
+  };
 }
 
 // ----------------------------------------------------
-// 📜 AUDIT & BUG BOUNTY REPORTS PERSISTENCE
+// 📜 AUDIT & BUG BOUNTY REPORTS PERSISTENCE (Strict Isolation)
 // ----------------------------------------------------
 
-export async function getReports(targetDomain?: string): Promise<ReportEntry[]> {
+export async function getReports(targetDomain?: string, targetId?: string): Promise<ReportEntry[]> {
   const db = await readDb();
+  if (targetId) {
+    return db.reports.filter(r => r.targetId === targetId);
+  }
   if (targetDomain) {
-    return db.reports.filter(r => r.targetDomain === targetDomain);
+    return db.reports.filter(r => r.targetDomain?.toLowerCase() === targetDomain.toLowerCase());
   }
   return db.reports;
 }

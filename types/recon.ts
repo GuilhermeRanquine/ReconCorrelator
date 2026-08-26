@@ -42,6 +42,7 @@ export interface TargetProject {
   id: string;
   name: string;
   domain: string;
+  accessCode: string; // Unique access code for strict isolation (e.g. BB-7F8A-9C2D)
   description: string;
   createdAt: string;
   platform?: BugBountyPlatform;
@@ -51,6 +52,17 @@ export interface TargetProject {
   rules: ScopeRule[];
   policy?: BugBountyPolicy;
   isDemo?: boolean;
+}
+
+export function generateAccessCode(prefix: string = 'BB'): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let p1 = '';
+  let p2 = '';
+  for (let i = 0; i < 4; i++) {
+    p1 += chars.charAt(Math.floor(Math.random() * chars.length));
+    p2 += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `${prefix}-${p1}-${p2}`;
 }
 
 export interface Vulnerability {
@@ -95,6 +107,8 @@ export interface DnsRecord {
 
 export interface CorrelatedAsset {
   id: string;
+  projectId?: string;
+  accessCode?: string;
   subdomain: string;
   rootDomain: string;
   isAlive: boolean;

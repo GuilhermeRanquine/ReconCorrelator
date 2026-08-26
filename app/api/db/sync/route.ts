@@ -1,42 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readDb, getProjects, getAssets, getTerminalState, getReports } from '@/lib/db';
+import { readDb, getProjects, getAssets, getTerminalState, getReports, getProjectByAccessCode } from '@/lib/db';
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const targetId = searchParams.get('targetId');
     const rootDomain = searchParams.get('rootDomain');
+    const accessCode = searchParams.get('accessCode');
 
     const db = await readDb();
     const projects = db.projects;
     
-    // Determine active target domain
-    const activeProject = targetId 
-      ? projects.find(p => p.id === targetId) || projects[0]
-      : projects[0];
+    // Determine active target project
+    let activeProject = null;
+    if (accessCode) {
+      activeProject = await getProjectByAccessCode(accessCode);
+    } else if (targetId) {
+      activeProject = projects.find(p => p.id === targetId) || null;
+    }
 
-    const activeDomain = rootDomain || activeProject?.domain;
+    // Strictly isolated assets
+    let assets = [];
+    let terminal = { folders: [], sessions: [] };
+    let reports = [];
 
-    const assets = activeDomain 
-      ? db.assets.filter(a => a.rootDomain.toLowerCase() === activeDomain.toLowerCase() || a.subdomain.toLowerCase().endsWith(`.${activeDomain.toLowerCase()}`))
-      : db.assets;
-
-    const terminal = activeProject 
-      ? await getTerminalState(activeProject.id)
-      : { folders: db.terminalFolders, sessions: db.terminalSessions };
-
-    const reports = await getReports(activeDomain);
+    if (activeProject) {
+      assets = await getAssets({ projectId: activeProject.id, rootDomain: activeProject.domain });
+      terminal = await getTerminalState(activeProject.id);
+      reports = await getReports(activeProject.domain, activeProject.id);
+    } else if (rootDomain) {
+      assets = await getAssets({ rootDomain });
+      reports = await getReports(rootDomain);
+    }
 
     return NextResponse.json({
       success: true,
       timestamp: new Date().toISOString(),
-      projects,
+      projectsCount: projects.length,
+      // Only return projects list metadata (or filtered if authenticated)
+      projects: projects.map(p => ({
+        id: p.id,
+        name: p.name,
+        domain: p.domain,
+        description: p.description,
+        accessCode: p.accessCode,
+        platform: p.platform,
+        createdAt: p.createdAt,
+        inScope: p.inScope,
+        outOfScope: p.outOfScope,
+        rules: p.rules,
+        policy: p.policy,
+      })),
       activeProject,
       assets,
       terminal,
       reports,
-      totalAssetsCount: db.assets.length,
-      cachedCommandsCount: db.reconCache.length,
+      totalAssetsCount: assets.length,
     });
   } catch (err: any) {
     console.error('API /api/db/sync error:', err);

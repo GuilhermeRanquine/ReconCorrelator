@@ -220,7 +220,7 @@ export function ProgramIngestionModal({
               </div>
 
               {/* Target Overview */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
                 <div className="bg-zinc-900/70 border border-zinc-800 rounded-xl p-3 space-y-1.5">
                   <span className="text-zinc-500 text-[10px] font-bold tracking-wider block">NOME DO PROGRAMA</span>
                   <input
@@ -237,6 +237,15 @@ export function ProgramIngestionModal({
                     value={parsedProject.domain}
                     onChange={(e) => setParsedProject({ ...parsedProject, domain: e.target.value })}
                     className="w-full bg-black/60 border border-zinc-800 focus:border-emerald-500 rounded-lg px-2.5 py-1 text-emerald-400 font-bold text-sm focus:outline-none transition-colors"
+                  />
+                </div>
+                <div className="bg-zinc-900/70 border border-zinc-800 rounded-xl p-3 space-y-1.5">
+                  <span className="text-amber-400 text-[10px] font-bold tracking-wider block">CÓDIGO ÚNICO DE ACESSO</span>
+                  <input
+                    type="text"
+                    value={parsedProject.accessCode || ''}
+                    onChange={(e) => setParsedProject({ ...parsedProject, accessCode: e.target.value.toUpperCase() })}
+                    className="w-full bg-black/60 border border-amber-800/80 focus:border-amber-500 rounded-lg px-2.5 py-1 text-amber-300 font-bold text-sm uppercase focus:outline-none transition-colors"
                   />
                 </div>
               </div>
