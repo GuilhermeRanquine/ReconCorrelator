@@ -29,6 +29,7 @@ const nextConfig = {
     config.resolve.alias = {
       ...config.resolve.alias,
       '@': path.resolve(__dirname),
+      'lucide-react': path.resolve(__dirname, 'lib/icons.tsx'),
     };
 
     if (dev && process.env.DISABLE_HMR === 'true') {

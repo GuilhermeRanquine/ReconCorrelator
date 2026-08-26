@@ -31,8 +31,15 @@ O **OmniNexus** é o sistema de governança corporativa autônoma que une os doi
                                │ (Emissão de Relatório em reports/)
                                ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                 [FASE 3: AUDITORIA & FEEDBACK]              │
-│   Protocolo Oficial Gerado ──► Distribuição às Equipes     │
+│                 [FASE 3: GITOPS & VERSIONAMENTO]            │
+│   @GitSquad: Branching Inteligente ──► Conventional Commit  │
+│   ──► Sanitização de Segredos ──► Push Remoto / Tagging     │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ (Sincronização com Upstream)
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 [FASE 4: AUDITORIA & FEEDBACK]              │
+│   Protocolo Oficial Concluído ──► Distribuição às Equipes   │
 │   ──► Próxima Iteração Autônoma (Sem Interrupção)          │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -67,5 +74,8 @@ O **OmniNexus** é o sistema de governança corporativa autônoma que une os doi
   - **Sugestões para Mudança & Melhoria**: (Próximos upgrades)
   - **Indicação de Próximos Passos**: (Início imediato do próximo ciclo)
 
-### ETAPA 6: Distribuição e Início do Próximo Ciclo (Chefe: @NexusPrime)
-- O relatório é entregue às equipes técnicas para atualizarem suas bases de conhecimento e iniciarem imediatamente as próximas tratativas.
+### ETAPA 6: Versionamento Contínuo & GitOps (Chefe: @GitSquad)
+- O `@GitSquad` intercepta o relatório gerado em `reports/`, analisa os diffs da working tree, faz o staging seguro, formata commits semânticos com o protocolo, orquestra merges para `main` e sincroniza (`git push`) com o repositório remoto.
+
+### ETAPA 7: Distribuição e Início do Próximo Ciclo (Chefe: @NexusPrime)
+- O relatório e o hash de commit são entregues às equipes técnicas para atualizarem suas bases de conhecimento e iniciarem imediatamente as próximas tratativas.

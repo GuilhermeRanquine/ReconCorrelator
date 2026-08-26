@@ -1,8 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TddSuite, TestCaseResult } from '@/types/recon';
-import { DeltaTestRunner } from '@/lib/tests/deltaTestSuite';
 import { 
   CheckCircle2, 
   XCircle, 
@@ -19,25 +18,44 @@ import {
 } from 'lucide-react';
 
 export function TddTestCenter() {
-  const [suites, setSuites] = useState<TddSuite[]>(() => DeltaTestRunner.runAllSuites());
+  const [suites, setSuites] = useState<TddSuite[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  const [selectedSuite, setSelectedSuite] = useState<TddSuite>(suites[0]);
-  const [selectedTest, setSelectedTest] = useState<TestCaseResult | null>(suites[0]?.tests[0] || null);
+  const [selectedSuite, setSelectedSuite] = useState<TddSuite | null>(null);
+  const [selectedTest, setSelectedTest] = useState<TestCaseResult | null>(null);
+
+  const fetchSuites = async () => {
+    setIsRunning(true);
+    try {
+      const res = await fetch('/api/tests/run');
+      const data = await res.json();
+      if (data.success && data.suites) {
+        setSuites(data.suites);
+        if (!selectedSuite && data.suites.length > 0) {
+          setSelectedSuite(data.suites[0]);
+          setSelectedTest(data.suites[0]?.tests[0] || null);
+        } else if (selectedSuite) {
+          const updated = data.suites.find((s: TddSuite) => s.file === selectedSuite.file) || data.suites[0];
+          setSelectedSuite(updated);
+          setSelectedTest(updated?.tests[0] || null);
+        }
+      }
+    } catch (e) {
+      console.error('Falha ao carregar testes:', e);
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSuites();
+  }, []);
 
   const totalTests = suites.reduce((acc, s) => acc + s.tests.length, 0);
   const passedTests = suites.reduce((acc, s) => acc + s.tests.filter(t => t.status === 'passed').length, 0);
   const failedTests = suites.reduce((acc, s) => acc + s.tests.filter(t => t.status === 'failed').length, 0);
 
   const handleRunAll = () => {
-    setIsRunning(true);
-    setTimeout(() => {
-      const fresh = DeltaTestRunner.runAllSuites();
-      setSuites(fresh);
-      const updatedSelectedSuite = fresh.find(s => s.file === selectedSuite.file) || fresh[0];
-      setSelectedSuite(updatedSelectedSuite);
-      setSelectedTest(updatedSelectedSuite.tests[0] || null);
-      setIsRunning(false);
-    }, 600);
+    fetchSuites();
   };
 
   return (
@@ -96,7 +114,7 @@ export function TddTestCenter() {
 
           <div className="space-y-1.5">
             {suites.map((suite) => {
-              const isSelected = selectedSuite.file === suite.file;
+              const isSelected = selectedSuite?.file === suite.file;
               const allPassed = suite.tests.every(t => t.status === 'passed');
 
               return (
@@ -141,76 +159,82 @@ export function TddTestCenter() {
 
         {/* Selected Suite Tests & Evidence Viewer */}
         <div className="lg:col-span-7 bg-zinc-950 border border-zinc-800 rounded-xl p-4 shadow-xl space-y-4">
-          <div className="border-b border-zinc-800 pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-400">
-                  SUITE
-                </span>
-                <h4 className="text-zinc-100 font-bold text-sm">{selectedSuite.name}</h4>
-              </div>
-              <span className="text-xs text-emerald-400 font-bold">
-                {selectedSuite.tests.length}/{selectedSuite.tests.length} Passou
-              </span>
-            </div>
-            <p className="text-zinc-400 text-xs mt-1">{selectedSuite.description}</p>
-          </div>
-
-          {/* Test Cases in this Suite */}
-          <div className="space-y-2">
-            <span className="text-zinc-500 text-[10px] uppercase font-bold tracking-wider block">
-              Casos de Teste (Test Methods)
-            </span>
-
-            <div className="space-y-1.5">
-              {selectedSuite.tests.map((test) => {
-                const isSelected = selectedTest?.id === test.id;
-
-                return (
-                  <div
-                    key={test.id}
-                    onClick={() => setSelectedTest(test)}
-                    className={`p-2.5 rounded-lg border transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-zinc-900 border-zinc-700 ring-1 ring-zinc-700'
-                        : 'bg-zinc-900/40 border-zinc-800/80 hover:bg-zinc-900/80'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                        <span className="font-bold text-xs text-zinc-200">{test.name}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-[10px] text-zinc-500">
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" /> {test.durationMs}ms
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">
-                          {test.assertionsCount} assertions
-                        </span>
-                      </div>
-                    </div>
+          {selectedSuite ? (
+            <>
+              <div className="border-b border-zinc-800 pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-400">
+                      SUITE
+                    </span>
+                    <h4 className="text-zinc-100 font-bold text-sm">{selectedSuite.name}</h4>
                   </div>
-                );
-              })}
-            </div>
-          </div>
+                  <span className="text-xs text-emerald-400 font-bold">
+                    {selectedSuite.tests.length}/{selectedSuite.tests.length} Passou
+                  </span>
+                </div>
+                <p className="text-zinc-400 text-xs mt-1">{selectedSuite.description}</p>
+              </div>
 
-          {/* Test Evidence & Assertion Output */}
-          {selectedTest && (
-            <div className="space-y-2 pt-2 border-t border-zinc-800">
-              <div className="flex items-center justify-between">
-                <span className="text-zinc-400 text-xs font-bold flex items-center gap-1.5">
-                  <Terminal className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Evidência de Execução (Delta QA Log)</span>
+              {/* Test Cases in this Suite */}
+              <div className="space-y-2">
+                <span className="text-zinc-500 text-[10px] uppercase font-bold tracking-wider block">
+                  Casos de Teste (Test Methods)
                 </span>
-                <span className="text-[10px] text-zinc-500 font-mono">Status: [PASS_VERIFIED]</span>
+
+                <div className="space-y-1.5">
+                  {selectedSuite.tests.map((test) => {
+                    const isSelected = selectedTest?.id === test.id;
+
+                    return (
+                      <div
+                        key={test.id}
+                        onClick={() => setSelectedTest(test)}
+                        className={`p-2.5 rounded-lg border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-zinc-900 border-zinc-700 ring-1 ring-zinc-700'
+                            : 'bg-zinc-900/40 border-zinc-800/80 hover:bg-zinc-900/80'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                            <span className="font-bold text-xs text-zinc-200">{test.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" /> {test.durationMs}ms
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">
+                              {test.assertionsCount} assertions
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
-              <div className="bg-black border border-zinc-800 rounded-lg p-3 font-mono text-xs text-emerald-400 leading-relaxed whitespace-pre-wrap">
-                {selectedTest.evidence}
-              </div>
-            </div>
+              {/* Test Evidence & Assertion Output */}
+              {selectedTest && (
+                <div className="space-y-2 pt-2 border-t border-zinc-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-400 text-xs font-bold flex items-center gap-1.5">
+                      <Terminal className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Evidência de Execução (Delta QA Log)</span>
+                    </span>
+                    <span className="text-[10px] text-zinc-500 font-mono">Status: [PASS_VERIFIED]</span>
+                  </div>
+
+                  <div className="bg-black border border-zinc-800 rounded-lg p-3 font-mono text-xs text-emerald-400 leading-relaxed whitespace-pre-wrap">
+                    {selectedTest.evidence}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="p-8 text-center text-zinc-500 text-xs">Carregando suítes de teste...</div>
           )}
         </div>
       </div>

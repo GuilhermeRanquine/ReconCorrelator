@@ -16,7 +16,7 @@ import {
   deleteDriveFile, 
   GoogleDriveFile 
 } from '@/lib/googleDrive';
-import { User } from 'firebase/auth';
+import { User } from '@/lib/googleAuth';
 import { 
   HardDrive, 
   CloudUpload, 

@@ -33,5 +33,6 @@ pnpm-debug.log*
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
 coverage/
+*.tsbuildinfo
+.antigravity/

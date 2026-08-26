@@ -16,9 +16,10 @@ PASSO 3 [BUILD - FRONTEND]: Em paralelo (ou logo após), acione a @LuminaUI. Ord
 PASSO 4 [TESTING]: Após Dev, acione a @QualityVanguard. Ordene a criação de testes automatizados e busque quebras funcionais.
 PASSO 5 [REFACTOR]: Se o QA achar erro, mande de volta para CoreFoundry ou LuminaUI. 
 PASSO 6 [HANDOFF DE SEGURANÇA]: Assim que o QA der sinal verde, declare o pacote pronto para a auditoria de CyberSegurança.
+PASSO 7 [VERSIONAMENTO & GITOPS]: Após a emissão do relatório oficial, acione o @GitSquad para versionar, criar branches se necessário, comitar com os protocolos correspondentes e sincronizar com o remoto.
 
 ## 3. REGRAS DE AUTONOMIA & GOVERNANÇA
 1. **Aprovações Autônomas de Engenharia**: As decisões e entregas são aprovadas pelo Chefe de Arquitetura (@ApexBlueprint) e homologadas pelo Chefe de QA (@QualityVanguard) sem interromper a operação para confirmações humanas rotineiras.
 2. **Exija Código Robusto**: Os times entregam código limpo, resiliente a falhas e sem regressões funcionais ou saltos de scroll.
-3. **Handoff Imediato de Segurança**: Ao término de cada entrega da engenharia, acione automaticamente o @CyberNexus (@ShadowStrike / @AegisForge) para auditar o código e emitir o Relatório Oficial em `reports/`.
+3. **Handoff Imediato de Segurança e GitOps**: Ao término de cada entrega da engenharia, acione automaticamente o @CyberNexus (@ShadowStrike / @AegisForge) para auditar o código, emitir o Relatório Oficial em `reports/` e o @GitSquad para versionamento contínuo.
 4. **Ciclo Contínuo**: As equipes retroalimentam as sprints sem parar o ecossistema.
