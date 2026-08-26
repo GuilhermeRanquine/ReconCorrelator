@@ -1,13 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json().catch(() => ({}));
+    return handleWayback(body.domain, body.limit);
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message, urls: [] }, { status: 500 });
+  }
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const domain = searchParams.get('domain');
     const limit = parseInt(searchParams.get('limit') || '100', 10);
+    return handleWayback(domain, limit);
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message, urls: [] }, { status: 500 });
+  }
+}
 
+async function handleWayback(domain: string | null | undefined, limit: number = 100) {
+  try {
     if (!domain) {
-      return NextResponse.json({ error: 'Parâmetro domain é obrigatório' }, { status: 400 });
+      return NextResponse.json({ error: 'Parâmetro domain é obrigatório', success: false, urls: [] }, { status: 400 });
     }
 
     const cleanDomain = domain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');

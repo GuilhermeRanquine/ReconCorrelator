@@ -11,8 +11,11 @@ function getAiClient(): GoogleGenAI {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { targetDomain, asset, allVulns, contextPrompt } = body;
+    const body = await req.json().catch(() => ({}));
+    const domain = body.targetDomain || body.target?.domain || (typeof body.target === 'string' ? body.target : 'target.com');
+    const assetData = body.asset || body.findings || {};
+    const vulnsData = body.allVulns || [];
+    const promptText = body.prompt || body.customPrompt || body.contextPrompt || 'Priorizar o caminho de menor resistência para obtenção de RCE, Information Disclosure crítico ou Account Takeover.';
 
     const ai = getAiClient();
 
@@ -25,10 +28,10 @@ Seu objetivo é analisar a superfície de ataque correlacionada de um alvo de Bu
 Responda em Markdown limpo, profissional, direto e técnico (em português).`;
 
     const userPrompt = `
-Alvo: ${targetDomain}
-Ativo Analisado: ${JSON.stringify(asset || {}, null, 2)}
-Vulnerabilidades Encontradas: ${JSON.stringify(allVulns || [], null, 2)}
-Contexto Adicional do Usuário: ${contextPrompt || 'Priorizar o caminho de menor resistência para obtenção de RCE, Information Disclosure crítico ou Account Takeover.'}
+Alvo: ${domain}
+Ativo Analisado: ${JSON.stringify(assetData, null, 2)}
+Vulnerabilidades Encontradas: ${JSON.stringify(vulnsData, null, 2)}
+Pergunta / Contexto do Pesquisador: ${promptText}
 `;
 
     const model = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
@@ -39,9 +42,12 @@ Contexto Adicional do Usuário: ${contextPrompt || 'Priorizar o caminho de menor
       ],
     });
 
+    const resultText = response.text || 'Análise concluída com sucesso.';
+
     return NextResponse.json({
       success: true,
-      analysis: response.text,
+      analysis: resultText,
+      triage: resultText,
       author: 'ALPHA (Red Team Lead)',
       timestamp: new Date().toISOString(),
     });

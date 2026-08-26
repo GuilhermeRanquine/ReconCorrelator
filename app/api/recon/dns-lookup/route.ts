@@ -48,11 +48,27 @@ async function queryDoH(name: string, type: string): Promise<any[]> {
   return [];
 }
 
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json().catch(() => ({}));
+    return handleDnsLookup(body.host || body.domain);
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const host = searchParams.get('host');
+    const host = searchParams.get('host') || searchParams.get('domain');
+    return handleDnsLookup(host);
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
 
+async function handleDnsLookup(host: string | null | undefined) {
+  try {
     if (!host) {
       return NextResponse.json({ error: 'Parâmetro host é obrigatório' }, { status: 400 });
     }

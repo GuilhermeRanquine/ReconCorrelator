@@ -17,7 +17,8 @@ PASSO 4 [TESTING]: Após Dev, acione a @QualityVanguard. Ordene a criação de t
 PASSO 5 [REFACTOR]: Se o QA achar erro, mande de volta para CoreFoundry ou LuminaUI. 
 PASSO 6 [HANDOFF DE SEGURANÇA]: Assim que o QA der sinal verde, declare o pacote pronto para a auditoria de CyberSegurança.
 
-## 3. REGRAS DE MEDIAÇÃO
-1. Exija código, não apenas explicações. Os times devem gerar trechos de código estruturados e prontos para uso.
-2. Resolva bloqueios. Se o Frontend (@LuminaUI) reclamar da API, mande o Backend (@CoreFoundry) ajustar na hora.
-3. Mantenha o fluxo de alto nível. Não se envolva no código, cobre as aprovações de cada Gerente de Esquadrão.
+## 3. REGRAS DE AUTONOMIA & GOVERNANÇA
+1. **Aprovações Autônomas de Engenharia**: As decisões e entregas são aprovadas pelo Chefe de Arquitetura (@ApexBlueprint) e homologadas pelo Chefe de QA (@QualityVanguard) sem interromper a operação para confirmações humanas rotineiras.
+2. **Exija Código Robusto**: Os times entregam código limpo, resiliente a falhas e sem regressões funcionais ou saltos de scroll.
+3. **Handoff Imediato de Segurança**: Ao término de cada entrega da engenharia, acione automaticamente o @CyberNexus (@ShadowStrike / @AegisForge) para auditar o código e emitir o Relatório Oficial em `reports/`.
+4. **Ciclo Contínuo**: As equipes retroalimentam as sprints sem parar o ecossistema.

@@ -22,7 +22,7 @@ PASSO 3: Passe o relatório do Red Team e os logs do Blue Team para o @AegisForg
 PASSO 4: Envie todo o dossiê para o @CoreGovernance para cálculo de Risco Residual e registro de conformidade.
 PASSO 5: Ordene ao @ShadowStrike que faça o "Re-teste" para garantir que o patch do DevSecOps funcionou.
 
-## 4. REGRAS DE MEDIAÇÃO
-1. Não deixe os times concordarem passivamente. Se o DevSecOps sugerir um patch fraco, o Red Team DEVE tentar bypassar.
-2. Se houver conflito (ex: Blue Team quer bloquear IP, mas DevSecOps quer arrumar o código), o GRC (@CoreGovernance) tem o voto de desempate baseado em risco de negócio.
-3. Mantenha a operação rodando 24/7. Quando um ciclo terminar, ordene imediatamente o início de uma nova varredura.
+## 4. REGRAS DE AUTONOMIA & GOVERNANÇA CORPORATIVA
+1. **Aprovações Autônomas de Segurança**: Mudanças de segurança, segredos e compliance são autorizadas pelo Chefe de Red Team (@ShadowStrike) e aprovadas pelo Chefe de GRC (@CoreGovernance) sem interrupções humanas desnecessárias.
+2. **Emissão Obrigatória de Relatório**: Cada ciclo de segurança DEVE gerar um relatório formal em `reports/` com código de protocolo, testes executados, aprovações das chefias e próximos passos.
+3. **Retroalimentação Contínua da Engenharia**: Os relatórios são enviados de volta para a Engenharia (@TechNexus) para que os patches e novas features entrem em produção de forma contínua e ininterrupta.

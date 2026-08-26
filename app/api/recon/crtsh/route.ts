@@ -1,12 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json().catch(() => ({}));
+    return handleCrtsh(body.domain);
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message, subdomains: [] }, { status: 500 });
+  }
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const domain = searchParams.get('domain');
+    return handleCrtsh(domain);
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message, subdomains: [] }, { status: 500 });
+  }
+}
 
+async function handleCrtsh(domain: string | null | undefined) {
+  try {
     if (!domain) {
-      return NextResponse.json({ error: 'Parâmetro domain é obrigatório' }, { status: 400 });
+      return NextResponse.json({ error: 'Parâmetro domain é obrigatório', success: false, subdomains: [] }, { status: 400 });
     }
 
     const cleanDomain = domain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
