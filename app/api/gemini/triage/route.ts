@@ -1,17 +1,12 @@
 import { GoogleGenAI } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
 
-let aiClient: GoogleGenAI | null = null;
-
 function getAiClient(): GoogleGenAI {
-  if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error('GEMINI_API_KEY is not configured');
-    }
-    aiClient = new GoogleGenAI({ apiKey });
+  const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY is not configured');
   }
-  return aiClient;
+  return new GoogleGenAI({ apiKey });
 }
 
 export async function POST(req: NextRequest) {
@@ -36,8 +31,9 @@ Vulnerabilidades Encontradas: ${JSON.stringify(allVulns || [], null, 2)}
 Contexto Adicional do Usuário: ${contextPrompt || 'Priorizar o caminho de menor resistência para obtenção de RCE, Information Disclosure crítico ou Account Takeover.'}
 `;
 
+    const model = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model,
       contents: [
         { role: 'user', parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }
       ],

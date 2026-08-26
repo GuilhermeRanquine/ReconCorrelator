@@ -2,24 +2,12 @@ import { GoogleGenAI, Type } from '@google/genai';
 import { NextRequest, NextResponse } from 'next/server';
 import { BugBountyPolicy, TargetProject, ScopeRule } from '@/types/recon';
 
-let aiClient: GoogleGenAI | null = null;
-
 function getAiClient(): GoogleGenAI {
-  if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error('GEMINI_API_KEY is not configured');
-    }
-    aiClient = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        },
-      },
-    });
+  const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY is not configured');
   }
-  return aiClient;
+  return new GoogleGenAI({ apiKey });
 }
 
 export async function POST(req: NextRequest) {
@@ -85,8 +73,9 @@ ${pageContentToAnalyze || `Programa: ${programUrl}`}
 Extraia todas as informações no formato JSON rigoroso. Se o texto for curto ou baseado na URL, deduza inteligentemente os domínios raiz mais prováveis e a estrutura padrão de escopo.
 `;
 
+    const model = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
     const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+      model,
       contents: userPrompt,
       config: {
         systemInstruction,

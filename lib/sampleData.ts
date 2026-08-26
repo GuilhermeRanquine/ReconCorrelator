@@ -9,6 +9,7 @@ export const SAMPLE_PROJECTS: TargetProject[] = [
     platform: 'hackerone',
     programUrl: 'https://hackerone.com/acme-security',
     createdAt: '2026-08-20T10:00:00Z',
+    isDemo: true,
     inScope: ['*.acmefinance.io', '198.51.100.0/24', 'api.acmefinance.io', 'auth.acmefinance.io'],
     outOfScope: ['internal-admin.acmefinance.io', '198.51.100.254', 'payment-gateway.acmefinance.io'],
     policy: {
@@ -59,6 +60,7 @@ export const SAMPLE_PROJECTS: TargetProject[] = [
     platform: 'hackerone',
     programUrl: 'https://hackerone.com/cybergrid-bbp',
     createdAt: '2026-08-22T14:30:00Z',
+    isDemo: true,
     inScope: ['*.cybergrid.tech', '203.0.113.0/24'],
     outOfScope: ['prod-vault.cybergrid.tech'],
     policy: {

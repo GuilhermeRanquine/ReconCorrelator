@@ -26,6 +26,7 @@ interface HeaderProps {
   onSelectProject: (project: TargetProject) => void;
   onOpenIngestion: () => void;
   onOpenProgramIngestion: () => void;
+  onOpenProjectManager: () => void;
   onOpenScope: () => void;
   onOpenTdd: () => void;
   onOpenAiTriage: () => void;
@@ -46,6 +47,7 @@ export function Header({
   onSelectProject,
   onOpenIngestion,
   onOpenProgramIngestion,
+  onOpenProjectManager,
   onOpenScope,
   onOpenTdd,
   onOpenAiTriage,
@@ -60,7 +62,7 @@ export function Header({
   researcherHandle = 'w0rmingstar',
 }: HeaderProps) {
   return (
-    <header className="border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-md sticky top-0 z-40">
+    <header className="border-b border-zinc-800/80 bg-zinc-950/95 backdrop-blur-xl sticky top-0 z-40 shadow-xl">
       {/* Top Squad & Target Bar */}
       <div className="max-w-7xl mx-auto px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/60">
         <div className="flex items-center gap-3">
@@ -111,14 +113,14 @@ export function Header({
             className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-black font-bold rounded-lg text-xs font-mono transition-all shadow-lg hover:shadow-emerald-950/50 cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Link BugBounty / Novo Alvo</span>
+            <span>Link BugBounty / Ingestor</span>
           </button>
 
-          <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 rounded-md px-2.5 py-1 text-xs">
-            <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-            <span className="text-zinc-400 text-[11px] font-mono">TARGET:</span>
+          <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-xs">
+            <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse shrink-0" />
+            <span className="text-zinc-400 text-[10px] font-mono font-bold">ALVO:</span>
             <select
-              className="bg-transparent text-zinc-100 font-mono text-xs focus:outline-none cursor-pointer max-w-[160px] truncate"
+              className="bg-transparent text-emerald-400 font-mono text-xs font-bold focus:outline-none cursor-pointer max-w-[140px] truncate"
               value={currentProject.id}
               onChange={(e) => {
                 const found = projects.find(p => p.id === e.target.value);
@@ -127,10 +129,17 @@ export function Header({
             >
               {projects.map((p) => (
                 <option key={p.id} value={p.id} className="bg-zinc-900 text-zinc-100">
-                  {p.domain}
+                  {p.domain} {p.isDemo ? '(Demo)' : ''}
                 </option>
               ))}
             </select>
+            <button
+              onClick={onOpenProjectManager}
+              className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-1.5 py-0.5 rounded font-mono transition-colors cursor-pointer ml-1"
+              title="Gerenciar, Excluir ou Limpar Projetos"
+            >
+              Gerenciar
+            </button>
           </div>
 
           <button

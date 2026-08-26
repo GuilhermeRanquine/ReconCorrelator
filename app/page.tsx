@@ -17,6 +17,7 @@ import { DataIngestionModal } from '@/components/DataIngestionModal';
 import { ScopeManagerModal } from '@/components/ScopeManagerModal';
 import { AiTriagerModal } from '@/components/AiTriagerModal';
 import { ExportModal } from '@/components/ExportModal';
+import { ProjectManagerModal } from '@/components/ProjectManagerModal';
 
 import { 
   ShieldAlert, 
@@ -44,7 +45,8 @@ import {
   RotateCcw,
   ShieldCheck,
   Lock,
-  HardDrive
+  HardDrive,
+  FolderKanban
 } from 'lucide-react';
 
 export default function ReconCorrelatorApp() {
@@ -55,11 +57,54 @@ export default function ReconCorrelatorApp() {
 
   // Modals
   const [isProgramIngestionOpen, setIsProgramIngestionOpen] = useState(false);
+  const [isProjectManagerOpen, setIsProjectManagerOpen] = useState(false);
   const [isIngestionOpen, setIsIngestionOpen] = useState(false);
   const [isScopeOpen, setIsScopeOpen] = useState(false);
   const [isAiTriageOpen, setIsAiTriageOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [selectedAssetForAi, setSelectedAssetForAi] = useState<CorrelatedAsset | null>(null);
+
+  // LocalStorage initialization & sync
+  React.useEffect(() => {
+    try {
+      const savedProjects = localStorage.getItem('recon_projects');
+      if (savedProjects) {
+        const parsed = JSON.parse(savedProjects);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setProjects(parsed);
+          setCurrentProject(parsed[0]);
+        }
+      }
+      const savedAssets = localStorage.getItem('recon_assets');
+      if (savedAssets) {
+        const parsedAssets = JSON.parse(savedAssets);
+        if (Array.isArray(parsedAssets)) {
+          setAssets(parsedAssets);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not read from localStorage', e);
+    }
+  }, []);
+
+  // Save to localStorage
+  const saveProjectsToStorage = (updated: TargetProject[]) => {
+    setProjects(updated);
+    try {
+      localStorage.setItem('recon_projects', JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Could not save projects to localStorage', e);
+    }
+  };
+
+  const saveAssetsToStorage = (updated: CorrelatedAsset[]) => {
+    setAssets(updated);
+    try {
+      localStorage.setItem('recon_assets', JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Could not save assets to localStorage', e);
+    }
+  };
 
   // Statistics
   const totalAssets = assets.length;
@@ -76,29 +121,109 @@ export default function ReconCorrelatorApp() {
   };
 
   const handleIngestSuccess = (newAssets: CorrelatedAsset[]) => {
-    setAssets(newAssets);
+    saveAssetsToStorage(newAssets);
   };
 
   const handleUpdateScope = (updatedTarget: TargetProject) => {
     setCurrentProject(updatedTarget);
-    setProjects(prev => prev.map(p => p.id === updatedTarget.id ? updatedTarget : p));
+    const updatedList = projects.map(p => p.id === updatedTarget.id ? updatedTarget : p);
+    saveProjectsToStorage(updatedList);
   };
 
   const handleProgramCreated = (newProject: TargetProject) => {
-    setProjects(prev => [newProject, ...prev]);
+    const updatedList = [newProject, ...projects.filter(p => p.id !== newProject.id)];
+    saveProjectsToStorage(updatedList);
     setCurrentProject(newProject);
-    setAssets([]); // Clean slate for real Bug Bounty recon
+    saveAssetsToStorage([]); // Clean slate for real Bug Bounty recon
     setActiveTab('flowchart');
   };
 
+  const handleDeleteProject = (projectId: string) => {
+    const remaining = projects.filter(p => p.id !== projectId);
+    if (remaining.length > 0) {
+      saveProjectsToStorage(remaining);
+      if (currentProject.id === projectId) {
+        setCurrentProject(remaining[0]);
+      }
+    } else {
+      // If user deleted all, create a clean default real project
+      const blankProj: TargetProject = {
+        id: `target-${Date.now()}`,
+        name: 'Novo Programa',
+        domain: 'target.com',
+        description: 'Programa de Bug Bounty limpo',
+        createdAt: new Date().toISOString(),
+        inScope: ['*.target.com', 'target.com'],
+        outOfScope: [],
+        rules: [],
+        policy: {
+          platform: 'custom',
+          policySummary: 'Regras de teste do programa.',
+          safeHarbor: true,
+          prohibitedVulns: ['DDoS', 'Self-XSS'],
+          requiredHeaders: [{ key: 'X-Bug-Bounty', value: 'w0rmingstar', description: 'Header de teste' }],
+          targetArchitecture: 'cloud_native',
+          bountyTiers: [],
+          extractedAt: new Date().toISOString(),
+        },
+        isDemo: false,
+      };
+      saveProjectsToStorage([blankProj]);
+      setCurrentProject(blankProj);
+      saveAssetsToStorage([]);
+    }
+  };
+
+  const handleClearDemoProjects = () => {
+    const onlyReal = projects.filter(p => !p.isDemo && !p.id.includes('demo') && p.domain !== 'acmefinance.io' && p.domain !== 'cyberbank.corp');
+    if (onlyReal.length > 0) {
+      saveProjectsToStorage(onlyReal);
+      setCurrentProject(onlyReal[0]);
+    } else {
+      // If all were demos, leave 1 clean real target
+      const blankProj: TargetProject = {
+        id: `target-${Date.now()}`,
+        name: 'Meu Alvo de Bug Bounty',
+        domain: 'empresa.com',
+        description: 'Programa de Bug Bounty real importado',
+        createdAt: new Date().toISOString(),
+        inScope: ['*.empresa.com', 'empresa.com'],
+        outOfScope: [],
+        rules: [],
+        policy: {
+          platform: 'custom',
+          policySummary: 'Regras de teste do programa.',
+          safeHarbor: true,
+          prohibitedVulns: ['DDoS', 'Self-XSS'],
+          requiredHeaders: [{ key: 'X-Bug-Bounty', value: 'w0rmingstar', description: 'Header de identificação' }],
+          targetArchitecture: 'cloud_native',
+          bountyTiers: [],
+          extractedAt: new Date().toISOString(),
+        },
+        isDemo: false,
+      };
+      saveProjectsToStorage([blankProj]);
+      setCurrentProject(blankProj);
+    }
+    saveAssetsToStorage([]); // Clear mock demo assets
+  };
+
+  const handleCreateNewProject = (newProj: TargetProject) => {
+    const updated = [newProj, ...projects];
+    saveProjectsToStorage(updated);
+    setCurrentProject(newProj);
+    saveAssetsToStorage([]);
+    setActiveTab('dashboard');
+  };
+
   const handleClearWorkspace = () => {
-    setAssets([]);
+    saveAssetsToStorage([]);
   };
 
   const handleLoadDemoSandbox = () => {
-    setProjects(SAMPLE_PROJECTS);
+    saveProjectsToStorage(SAMPLE_PROJECTS);
     setCurrentProject(SAMPLE_PROJECTS[0]);
-    setAssets(SAMPLE_ASSETS);
+    saveAssetsToStorage(SAMPLE_ASSETS);
   };
 
   // Merge discovered assets seamlessly
@@ -185,7 +310,7 @@ export default function ReconCorrelatorApp() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans selection:bg-emerald-500 selection:text-black">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans selection:bg-emerald-500 selection:text-black cyber-grid-bg relative">
       {/* Top Header */}
       <Header
         currentProject={currentProject}
@@ -193,6 +318,7 @@ export default function ReconCorrelatorApp() {
         onSelectProject={(p) => setCurrentProject(p)}
         onOpenIngestion={() => setIsIngestionOpen(true)}
         onOpenProgramIngestion={() => setIsProgramIngestionOpen(true)}
+        onOpenProjectManager={() => setIsProjectManagerOpen(true)}
         onOpenScope={() => setIsScopeOpen(true)}
         onOpenTdd={() => setActiveTab('tdd')}
         onOpenAiTriage={() => { setSelectedAssetForAi(null); setIsAiTriageOpen(true); }}
@@ -553,6 +679,17 @@ export default function ReconCorrelatorApp() {
       </main>
 
       {/* Modals */}
+      <ProjectManagerModal
+        isOpen={isProjectManagerOpen}
+        onClose={() => setIsProjectManagerOpen(false)}
+        projects={projects}
+        currentProject={currentProject}
+        onSelectProject={(p) => setCurrentProject(p)}
+        onDeleteProject={handleDeleteProject}
+        onClearDemoProjects={handleClearDemoProjects}
+        onCreateNewProject={handleCreateNewProject}
+      />
+
       <ProgramIngestionModal
         isOpen={isProgramIngestionOpen}
         onClose={() => setIsProgramIngestionOpen(false)}

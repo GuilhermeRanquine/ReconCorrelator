@@ -1,1 +1,104 @@
 @import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: #09090b;
+    --foreground: #f4f4f5;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  /* Custom Smooth Dark Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: rgba(9, 9, 11, 0.9);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(39, 39, 42, 0.8);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(16, 185, 129, 0.6);
+  }
+}
+
+/* Glassmorphism & Cyber Aesthetics */
+.glass-panel {
+  background: rgba(12, 12, 16, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-card {
+  background: rgba(18, 18, 23, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  background: rgba(24, 24, 30, 0.8);
+  border-color: rgba(16, 185, 129, 0.3);
+  box-shadow: 0 8px 32px -4px rgba(0, 0, 0, 0.5), 0 0 20px -2px rgba(16, 185, 129, 0.15);
+  transform: translateY(-2px);
+}
+
+/* Cyber Glow Utilities */
+.glow-emerald {
+  box-shadow: 0 0 20px -3px rgba(16, 185, 129, 0.35);
+}
+
+.glow-cyan {
+  box-shadow: 0 0 20px -3px rgba(6, 182, 212, 0.35);
+}
+
+.glow-purple {
+  box-shadow: 0 0 20px -3px rgba(168, 85, 247, 0.35);
+}
+
+.glow-red {
+  box-shadow: 0 0 20px -3px rgba(239, 68, 68, 0.35);
+}
+
+/* Background Cyber Grid */
+.cyber-grid-bg {
+  background-size: 32px 32px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+}
+
+/* Smooth Micro-animations */
+@keyframes pulseSlow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.98); }
+}
+
+.animate-pulse-slow {
+  animation: pulseSlow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(1000%); }
+}
+
+.scanline-effect {
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.6), transparent);
+  animation: scanline 8s linear infinite;
+  pointer-events: none;
+}

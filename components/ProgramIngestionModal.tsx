@@ -221,13 +221,23 @@ export function ProgramIngestionModal({
 
               {/* Target Overview */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                <div className="bg-zinc-900/70 border border-zinc-800 rounded-xl p-3 space-y-1">
-                  <span className="text-zinc-500 text-[10px] block">NOME DO PROGRAMA</span>
-                  <strong className="text-zinc-100 text-sm">{parsedProject.name}</strong>
+                <div className="bg-zinc-900/70 border border-zinc-800 rounded-xl p-3 space-y-1.5">
+                  <span className="text-zinc-500 text-[10px] font-bold tracking-wider block">NOME DO PROGRAMA</span>
+                  <input
+                    type="text"
+                    value={parsedProject.name}
+                    onChange={(e) => setParsedProject({ ...parsedProject, name: e.target.value })}
+                    className="w-full bg-black/60 border border-zinc-800 focus:border-emerald-500 rounded-lg px-2.5 py-1 text-zinc-100 font-bold text-sm focus:outline-none transition-colors"
+                  />
                 </div>
-                <div className="bg-zinc-900/70 border border-zinc-800 rounded-xl p-3 space-y-1">
-                  <span className="text-zinc-500 text-[10px] block">DOMÍNIO PRINCIPAL</span>
-                  <strong className="text-emerald-400 text-sm">{parsedProject.domain}</strong>
+                <div className="bg-zinc-900/70 border border-zinc-800 rounded-xl p-3 space-y-1.5">
+                  <span className="text-zinc-500 text-[10px] font-bold tracking-wider block">DOMÍNIO PRINCIPAL</span>
+                  <input
+                    type="text"
+                    value={parsedProject.domain}
+                    onChange={(e) => setParsedProject({ ...parsedProject, domain: e.target.value })}
+                    className="w-full bg-black/60 border border-zinc-800 focus:border-emerald-500 rounded-lg px-2.5 py-1 text-emerald-400 font-bold text-sm focus:outline-none transition-colors"
+                  />
                 </div>
               </div>
 
@@ -264,10 +274,13 @@ export function ProgramIngestionModal({
                 )}
               </div>
 
-              {/* Policy & Bounties */}
-              <div className="bg-zinc-900/40 border border-zinc-800 rounded-xl p-3 space-y-2 text-xs">
+              {/* Policy, Rules & Editable Headers */}
+              <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 space-y-3 text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-zinc-300">Resumo das Regras & Safe Harbor</span>
+                  <span className="font-bold text-zinc-200 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Resumo das Regras & Safe Harbor</span>
+                  </span>
                   <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
                     parsedProject.policy?.safeHarbor ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-zinc-800 text-zinc-400'
                   }`}>
@@ -278,14 +291,111 @@ export function ProgramIngestionModal({
                   {parsedProject.policy?.policySummary}
                 </p>
 
-                {parsedProject.policy?.requiredHeaders && parsedProject.policy.requiredHeaders.length > 0 && (
-                  <div className="pt-1">
-                    <span className="text-[10px] text-cyan-400 font-bold block mb-1">Header Obrigatório de Teste:</span>
-                    <code className="text-[11px] text-cyan-300 bg-black px-2 py-1 rounded border border-zinc-800 block">
-                      {parsedProject.policy.requiredHeaders[0].key}: {parsedProject.policy.requiredHeaders[0].value}
-                    </code>
+                {/* Interactive / Editable Headers */}
+                <div className="pt-2 border-t border-zinc-800/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-cyan-400 font-bold flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Headers de Teste & Identificação do Pesquisador (Customizável):</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentHeaders = parsedProject.policy?.requiredHeaders || [];
+                        const updated = [
+                          ...currentHeaders,
+                          { key: 'X-Bug-Bounty', value: 'seu_username_hackerone', description: 'Header customizado' }
+                        ];
+                        setParsedProject({
+                          ...parsedProject,
+                          policy: {
+                            ...parsedProject.policy,
+                            platform: parsedProject.policy?.platform || 'custom',
+                            policySummary: parsedProject.policy?.policySummary || '',
+                            safeHarbor: parsedProject.policy?.safeHarbor ?? true,
+                            prohibitedVulns: parsedProject.policy?.prohibitedVulns || [],
+                            targetArchitecture: parsedProject.policy?.targetArchitecture || 'cloud_native',
+                            bountyTiers: parsedProject.policy?.bountyTiers || [],
+                            extractedAt: parsedProject.policy?.extractedAt || new Date().toISOString(),
+                            requiredHeaders: updated,
+                          }
+                        });
+                      }}
+                      className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Adicionar Header</span>
+                    </button>
                   </div>
-                )}
+
+                  <p className="text-[10px] text-zinc-400">
+                    Edite o valor do header abaixo para colocar seu <strong>usuário real da plataforma</strong> (ex: seu username na HackerOne ou Bugcrowd). Ele será injetado automaticamente em todos os comandos cURL, Httpx e Nuclei.
+                  </p>
+
+                  <div className="space-y-2">
+                    {(parsedProject.policy?.requiredHeaders && parsedProject.policy.requiredHeaders.length > 0 
+                      ? parsedProject.policy.requiredHeaders 
+                      : [{ key: 'X-Bug-Bounty', value: 'HackerOne-Username', description: 'Header de identificação' }]
+                    ).map((hdr, hIdx) => (
+                      <div key={hIdx} className="flex items-center gap-2 bg-black border border-cyan-950/80 rounded-lg p-1.5">
+                        <div className="flex-1 flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={hdr.key}
+                            onChange={(e) => {
+                              const headers = [...(parsedProject.policy?.requiredHeaders || [{ key: 'X-Bug-Bounty', value: 'HackerOne-Username' }])];
+                              headers[hIdx] = { ...headers[hIdx], key: e.target.value };
+                              setParsedProject({
+                                ...parsedProject,
+                                policy: {
+                                  ...parsedProject.policy!,
+                                  requiredHeaders: headers,
+                                }
+                              });
+                            }}
+                            placeholder="Header (ex: X-Bug-Bounty)"
+                            className="w-1/3 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs text-cyan-300 font-mono focus:outline-none focus:border-cyan-500 font-semibold"
+                          />
+                          <span className="text-zinc-600 font-bold">:</span>
+                          <input
+                            type="text"
+                            value={hdr.value}
+                            onChange={(e) => {
+                              const headers = [...(parsedProject.policy?.requiredHeaders || [{ key: 'X-Bug-Bounty', value: 'HackerOne-Username' }])];
+                              headers[hIdx] = { ...headers[hIdx], value: e.target.value };
+                              setParsedProject({
+                                ...parsedProject,
+                                policy: {
+                                  ...parsedProject.policy!,
+                                  requiredHeaders: headers,
+                                }
+                              });
+                            }}
+                            placeholder="Valor / Seu Username (ex: w0rmingstar)"
+                            className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs text-emerald-400 font-mono focus:outline-none focus:border-emerald-500 font-bold"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const headers = (parsedProject.policy?.requiredHeaders || []).filter((_, i) => i !== hIdx);
+                            setParsedProject({
+                              ...parsedProject,
+                              policy: {
+                                ...parsedProject.policy!,
+                                requiredHeaders: headers,
+                              }
+                            });
+                          }}
+                          className="text-zinc-500 hover:text-red-400 p-1 transition-colors cursor-pointer"
+                          title="Remover este header"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           )}

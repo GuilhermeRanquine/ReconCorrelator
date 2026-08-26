@@ -231,6 +231,99 @@ export function ScopeManagerModal({
               </div>
             </div>
           </div>
+
+          {/* Headers de Teste & OPSEC Identity */}
+          <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
+                <Info className="w-4 h-4" />
+                <span>Headers de Identificação de Bug Bounty (Injetados em todas as ferramentas)</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const headers = target.policy?.requiredHeaders || [];
+                  const updated = [
+                    ...headers,
+                    { key: 'X-Bug-Bounty', value: 'seu_username_hackerone', description: 'Header customizado' }
+                  ];
+                  onUpdateScope({
+                    ...target,
+                    policy: {
+                      ...target.policy!,
+                      requiredHeaders: updated,
+                    }
+                  });
+                }}
+                className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3 h-3" />
+                <span>Adicionar Header</span>
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {(target.policy?.requiredHeaders && target.policy.requiredHeaders.length > 0 
+                ? target.policy.requiredHeaders 
+                : [{ key: 'X-Bug-Bounty', value: 'w0rmingstar', description: 'Header de identificação' }]
+              ).map((hdr, hIdx) => (
+                <div key={hIdx} className="flex items-center gap-2 bg-black border border-zinc-800 rounded-lg p-1.5">
+                  <input
+                    type="text"
+                    value={hdr.key}
+                    onChange={(e) => {
+                      const headers = [...(target.policy?.requiredHeaders || [{ key: 'X-Bug-Bounty', value: 'w0rmingstar' }])];
+                      headers[hIdx] = { ...headers[hIdx], key: e.target.value };
+                      onUpdateScope({
+                        ...target,
+                        policy: {
+                          ...target.policy!,
+                          requiredHeaders: headers,
+                        }
+                      });
+                    }}
+                    placeholder="Header (ex: X-Bug-Bounty)"
+                    className="w-1/3 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs text-cyan-300 font-mono focus:outline-none focus:border-cyan-500 font-semibold"
+                  />
+                  <span className="text-zinc-600 font-bold">:</span>
+                  <input
+                    type="text"
+                    value={hdr.value}
+                    onChange={(e) => {
+                      const headers = [...(target.policy?.requiredHeaders || [{ key: 'X-Bug-Bounty', value: 'w0rmingstar' }])];
+                      headers[hIdx] = { ...headers[hIdx], value: e.target.value };
+                      onUpdateScope({
+                        ...target,
+                        policy: {
+                          ...target.policy!,
+                          requiredHeaders: headers,
+                        }
+                      });
+                    }}
+                    placeholder="Seu Username / Nick da Plataforma"
+                    className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs text-emerald-400 font-mono focus:outline-none focus:border-emerald-500 font-bold"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const headers = (target.policy?.requiredHeaders || []).filter((_, i) => i !== hIdx);
+                      onUpdateScope({
+                        ...target,
+                        policy: {
+                          ...target.policy!,
+                          requiredHeaders: headers,
+                        }
+                      });
+                    }}
+                    className="text-zinc-500 hover:text-red-400 p-1 transition-colors cursor-pointer"
+                    title="Remover este header"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Footer */}
