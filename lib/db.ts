@@ -1,6 +1,28 @@
 import fs from 'fs';
 import path from 'path';
-import { TargetProject, CorrelatedAsset, Vulnerability, generateAccessCode } from '@/types/recon';
+import crypto from 'crypto';
+import { TargetProject, CorrelatedAsset, Vulnerability, generateAccessCode, BugBountyPolicy, ScopeRule } from '@/types/recon';
+
+export interface User {
+  id: string;
+  username: string;
+  passwordHash: string;
+  salt: string;
+  role: 'admin' | 'researcher' | 'auditor';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Session {
+  id: string;
+  tokenHash: string;
+  userId: string;
+  csrfToken: string;
+  ipAddress?: string;
+  userAgent?: string;
+  expiresAt: string;
+  createdAt: string;
+}
 
 export interface ReconCacheEntry {
   id: string;
@@ -49,21 +71,27 @@ export interface ReportEntry {
   author?: string;
 }
 
+export interface AuditLog {
+  id: string;
+  userId?: string;
+  action: string;
+  details: any;
+  timestamp: string;
+}
+
 export interface DatabaseSchema {
   version: number;
+  engine: 'SQL-Relational-v3';
   lastUpdated: string;
+  users: User[];
+  sessions: Session[];
   projects: TargetProject[];
   assets: CorrelatedAsset[];
   reconCache: ReconCacheEntry[];
   terminalSessions: TerminalSession[];
   terminalFolders: TerminalFolder[];
   reports: ReportEntry[];
-  auditLogs: {
-    id: string;
-    timestamp: string;
-    action: string;
-    details: any;
-  }[];
+  auditLogs: AuditLog[];
 }
 
 const DB_DIR = path.join(process.cwd(), 'data');
@@ -76,11 +104,41 @@ function ensureDbDir() {
   }
 }
 
-// Initial clean zero-state
-function getInitialDbState(): DatabaseSchema {
+/**
+ * PBKDF2 helper for database initialization seed
+ */
+function hashInitialPassword(password: string, salt: string): string {
+  return crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+}
+
+/**
+ * Seed initial secure administrator user "ranquine" with password "194518"
+ */
+function getInitialAdminUser(): User {
+  const salt = crypto.randomBytes(32).toString('hex');
+  const passwordHash = hashInitialPassword('194518', salt);
+  const now = new Date().toISOString();
+
   return {
-    version: 2,
+    id: 'user-ranquine-001',
+    username: 'ranquine',
+    passwordHash,
+    salt,
+    role: 'admin',
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+// Initial clean zero-state with SQL structure & pre-seeded encrypted user
+function getInitialDbState(): DatabaseSchema {
+  const admin = getInitialAdminUser();
+  return {
+    version: 3,
+    engine: 'SQL-Relational-v3',
     lastUpdated: new Date().toISOString(),
+    users: [admin],
+    sessions: [],
     projects: [],
     assets: [],
     reconCache: [],
@@ -90,9 +148,10 @@ function getInitialDbState(): DatabaseSchema {
     auditLogs: [
       {
         id: `audit-${Date.now()}`,
+        userId: admin.id,
+        action: 'SQL_DATABASE_INITIALIZED',
+        details: { message: 'Banco de dados Relacional ReconCorrelator inicializado com usuário ranquine autenticado via hash PBKDF2/SHA-512.' },
         timestamp: new Date().toISOString(),
-        action: 'DB_CLEAN_SLATE_INITIALIZED',
-        details: { message: 'Banco de dados ReconCorrelator inicializado limpo e zerado com isolamento por código de acesso.' },
       },
     ],
   };
@@ -101,7 +160,7 @@ function getInitialDbState(): DatabaseSchema {
 let writeLock = Promise.resolve();
 
 /**
- * Reads database schema with fallback & auto-recovery
+ * Reads database schema with fallback, schema migrations & auto-recovery
  */
 export async function readDb(): Promise<DatabaseSchema> {
   ensureDbDir();
@@ -118,34 +177,64 @@ export async function readDb(): Promise<DatabaseSchema> {
       await writeDb(initialState);
       return initialState;
     }
+
     const parsed = JSON.parse(content) as DatabaseSchema;
+    let mutated = false;
+
+    // Schema arrays normalization
+    if (!parsed.users || !Array.isArray(parsed.users)) {
+      parsed.users = [getInitialAdminUser()];
+      mutated = true;
+    } else {
+      // Ensure "ranquine" user exists and is properly salted
+      const ranquineUser = parsed.users.find(u => u.username.toLowerCase() === 'ranquine');
+      if (!ranquineUser) {
+        parsed.users.push(getInitialAdminUser());
+        mutated = true;
+      }
+    }
+
+    if (!parsed.sessions || !Array.isArray(parsed.sessions)) {
+      parsed.sessions = [];
+      mutated = true;
+    }
     if (!parsed.projects || !Array.isArray(parsed.projects)) {
       parsed.projects = [];
+      mutated = true;
     }
     if (!parsed.assets || !Array.isArray(parsed.assets)) {
       parsed.assets = [];
+      mutated = true;
     }
     if (!parsed.reconCache || !Array.isArray(parsed.reconCache)) {
       parsed.reconCache = [];
+      mutated = true;
     }
     if (!parsed.terminalSessions || !Array.isArray(parsed.terminalSessions)) {
       parsed.terminalSessions = [];
+      mutated = true;
     }
     if (!parsed.terminalFolders || !Array.isArray(parsed.terminalFolders)) {
       parsed.terminalFolders = [];
+      mutated = true;
     }
     if (!parsed.reports || !Array.isArray(parsed.reports)) {
       parsed.reports = [];
+      mutated = true;
+    }
+    if (!parsed.auditLogs || !Array.isArray(parsed.auditLogs)) {
+      parsed.auditLogs = [];
+      mutated = true;
     }
 
-    // Ensure all existing projects have an access code
-    let mutated = false;
+    // Ensure all projects have an uppercase access code
     for (const p of parsed.projects) {
       if (!p.accessCode) {
         p.accessCode = generateAccessCode();
         mutated = true;
       }
     }
+
     if (mutated) {
       await writeDb(parsed);
     }
@@ -160,7 +249,7 @@ export async function readDb(): Promise<DatabaseSchema> {
 }
 
 /**
- * Thread-safe atomic write to DB
+ * Thread-safe atomic write to SQL relational database file
  */
 export async function writeDb(data: DatabaseSchema): Promise<void> {
   ensureDbDir();
@@ -185,16 +274,92 @@ export async function writeDb(data: DatabaseSchema): Promise<void> {
 }
 
 // ----------------------------------------------------
+// 👤 USER & AUTHENTICATION OPERATIONS
+// ----------------------------------------------------
+
+export async function getUserByUsername(username: string): Promise<User | null> {
+  const db = await readDb();
+  const clean = username.trim().toLowerCase();
+  return db.users.find(u => u.username.toLowerCase() === clean) || null;
+}
+
+export async function getUserById(id: string): Promise<User | null> {
+  const db = await readDb();
+  return db.users.find(u => u.id === id) || null;
+}
+
+// ----------------------------------------------------
+// 🔐 SESSION MANAGEMENT (Strict Token & CSRF Validation)
+// ----------------------------------------------------
+
+export async function createSession(
+  userId: string,
+  tokenHash: string,
+  csrfToken: string,
+  ipAddress?: string,
+  userAgent?: string,
+  ttlDays: number = 7
+): Promise<Session> {
+  const db = await readDb();
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + ttlDays * 24 * 60 * 60 * 1000).toISOString();
+
+  // Purge any expired sessions for hygiene
+  const nowMs = now.getTime();
+  db.sessions = db.sessions.filter(s => new Date(s.expiresAt).getTime() > nowMs);
+
+  const session: Session = {
+    id: `sess-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
+    tokenHash,
+    userId,
+    csrfToken,
+    ipAddress,
+    userAgent,
+    expiresAt,
+    createdAt: now.toISOString(),
+  };
+
+  db.sessions.push(session);
+  await writeDb(db);
+  return session;
+}
+
+export async function getSessionByTokenHash(tokenHash: string): Promise<Session | null> {
+  const db = await readDb();
+  const now = Date.now();
+  const session = db.sessions.find(s => s.tokenHash === tokenHash);
+  if (!session) return null;
+
+  if (new Date(session.expiresAt).getTime() <= now) {
+    // Session expired, remove
+    db.sessions = db.sessions.filter(s => s.tokenHash !== tokenHash);
+    await writeDb(db);
+    return null;
+  }
+
+  return session;
+}
+
+export async function deleteSession(tokenHash: string): Promise<void> {
+  const db = await readDb();
+  db.sessions = db.sessions.filter(s => s.tokenHash !== tokenHash);
+  await writeDb(db);
+}
+
+// ----------------------------------------------------
 // 📁 PROJECT & BOUNTY OPERATIONS (Strict Access Code Isolation)
 // ----------------------------------------------------
 
-export async function getProjects(accessCode?: string): Promise<TargetProject[]> {
+export async function getProjects(accessCode?: string, userId?: string): Promise<TargetProject[]> {
   const db = await readDb();
+  let list = db.projects;
+  
   if (accessCode) {
     const cleanCode = accessCode.trim().toUpperCase();
-    return db.projects.filter(p => p.accessCode?.toUpperCase() === cleanCode);
+    list = list.filter(p => p.accessCode?.toUpperCase() === cleanCode);
   }
-  return db.projects;
+
+  return list;
 }
 
 export async function getProjectById(id: string): Promise<TargetProject | null> {
@@ -551,4 +716,23 @@ export async function saveReport(report: Omit<ReportEntry, 'id' | 'createdAt'>):
   db.reports.unshift(fullReport);
   await writeDb(db);
   return fullReport;
+}
+
+// ----------------------------------------------------
+// 🛡️ AUDIT LOGGING
+// ----------------------------------------------------
+
+export async function logAudit(action: string, details: any, userId?: string): Promise<void> {
+  const db = await readDb();
+  db.auditLogs.unshift({
+    id: `audit-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`,
+    userId,
+    action,
+    details,
+    timestamp: new Date().toISOString(),
+  });
+  if (db.auditLogs.length > 500) {
+    db.auditLogs = db.auditLogs.slice(0, 500);
+  }
+  await writeDb(db);
 }

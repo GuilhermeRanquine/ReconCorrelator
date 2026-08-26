@@ -21,7 +21,10 @@ import {
   Copy,
   Check,
   Layers,
-  ArrowRightLeft
+  ArrowRightLeft,
+  User as UserIcon,
+  LogOut,
+  ShieldCheck
 } from 'lucide-react';
 
 export type ReconTab = 'dashboard' | 'terminal' | 'flowchart' | 'workbench' | 'graph' | 'assets' | 'pipeline' | 'tdd' | 'drive';
@@ -29,6 +32,8 @@ export type ReconTab = 'dashboard' | 'terminal' | 'flowchart' | 'workbench' | 'g
 interface HeaderProps {
   currentProject: TargetProject | null;
   projects: TargetProject[];
+  currentUser?: { id: string; username: string; role: string } | null;
+  onLogout?: () => void;
   onSelectProject: (project: TargetProject) => void;
   onLockBounty: () => void;
   onOpenIngestion: () => void;
@@ -51,6 +56,8 @@ interface HeaderProps {
 export function Header({
   currentProject,
   projects,
+  currentUser,
+  onLogout,
   onSelectProject,
   onLockBounty,
   onOpenIngestion,
@@ -67,7 +74,7 @@ export function Header({
   takeoverCount,
   activeTab,
   setActiveTab,
-  researcherHandle = 'w0rmingstar',
+  researcherHandle = 'ranquine',
 }: HeaderProps) {
   const [isCopied, setIsCopied] = useState(false);
 
@@ -80,37 +87,39 @@ export function Header({
   };
 
   return (
-    <header className="border-b border-zinc-800/80 bg-zinc-950/95 backdrop-blur-xl sticky top-0 z-40 shadow-xl font-mono">
-      {/* Top Squad & Target Bar */}
-      <div className="max-w-7xl mx-auto px-4 py-2 flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/60">
+    <header className="border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur-2xl sticky top-0 z-40 shadow-xl font-mono">
+      {/* Top Bar: Insignia, Squads & User Profile */}
+      <div className="max-w-7xl mx-auto px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/60">
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-              <Terminal className="w-4 h-4" />
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-b from-zinc-800 to-zinc-900 border border-white/10 flex items-center justify-center text-emerald-400 shadow-md">
+              <ShieldCheck className="w-4 h-4" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-bold text-sm text-zinc-100 tracking-wide">w0rmingstar</span>
-                <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 font-bold">
-                  RECON CORRELATOR SUITE
+                <span className="font-bold text-sm text-zinc-100 tracking-wide">
+                  {currentUser?.username || researcherHandle}
+                </span>
+                <span className="text-[10px] uppercase px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 font-bold">
+                  RECON NEXUS
                 </span>
               </div>
-              <p className="text-[11px] text-zinc-400">Isolamento Estrito por Código Único de Acesso</p>
+              <p className="text-[11px] text-zinc-400 font-sans">Isolamento Estrito por Código Único de Acesso</p>
             </div>
           </div>
 
           <div className="hidden lg:flex items-center pl-4 border-l border-zinc-800 gap-1.5 text-[11px]">
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300">
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900/60 border border-zinc-800/80 text-zinc-300">
               <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse"></span>
               <strong className="text-red-400">ALPHA:</strong> RedTeam
             </div>
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300">
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900/60 border border-zinc-800/80 text-zinc-300">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
               <strong className="text-cyan-400">BETA:</strong> Async Engine
             </div>
             <button 
               onClick={onOpenTdd}
-              className="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/80 text-emerald-300 hover:bg-emerald-900/60 transition-colors cursor-pointer"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-950/60 border border-emerald-800/80 text-emerald-300 hover:bg-emerald-900/60 transition-colors cursor-pointer"
               title="Abrir Centro de Testes TDD"
             >
               <CheckCircle2 className="w-3 h-3 text-emerald-400" />
@@ -119,12 +128,12 @@ export function Header({
           </div>
         </div>
 
-        {/* Target Selector, Access Code & OPSEC Indicator */}
+        {/* Target Selector, Access Code, User Pill & Logout */}
         <div className="flex items-center gap-2">
           {currentProject ? (
             <>
               {/* Active Access Code Badge */}
-              <div className="flex items-center gap-1.5 bg-black border border-amber-800/80 rounded-lg px-2.5 py-1 text-xs text-amber-300 shadow-inner">
+              <div className="flex items-center gap-1.5 bg-zinc-900/80 border border-amber-800/80 rounded-xl px-3 py-1.5 text-xs text-amber-300 shadow-inner">
                 <Key className="w-3.5 h-3.5 text-amber-400" />
                 <span className="text-[10px] text-amber-500 uppercase font-bold">Código:</span>
                 <span className="font-bold tracking-wider">{currentProject.accessCode}</span>
@@ -138,7 +147,7 @@ export function Header({
               </div>
 
               {/* Target Indicator */}
-              <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-xs">
+              <div className="flex items-center gap-1.5 bg-zinc-900/80 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs">
                 <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse shrink-0" />
                 <span className="text-zinc-400 text-[10px] font-bold">ALVO:</span>
                 <span className="text-emerald-400 font-bold max-w-[130px] truncate" title={currentProject.domain}>
@@ -146,7 +155,7 @@ export function Header({
                 </span>
                 <button
                   onClick={onOpenProjectManager}
-                  className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-1.5 py-0.5 rounded transition-colors cursor-pointer ml-1"
+                  className="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-0.5 rounded-lg transition-colors cursor-pointer ml-1"
                   title="Gerenciar Alvos e Chaves"
                 >
                   Gerenciar
@@ -156,7 +165,7 @@ export function Header({
               {/* Lock / Switch Button */}
               <button
                 onClick={onLockBounty}
-                className="flex items-center gap-1.5 px-2.5 py-1 bg-red-950/50 hover:bg-red-900/60 border border-red-800/80 rounded-lg text-red-300 text-xs transition-colors cursor-pointer shadow-sm"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-950/50 hover:bg-red-900/60 border border-red-800/80 rounded-xl text-red-300 text-xs transition-colors cursor-pointer shadow-sm active:scale-[0.98]"
                 title="Bloquear sessão e trocar de Bug Bounty"
               >
                 <Lock className="w-3.5 h-3.5 text-red-400" />
@@ -166,7 +175,7 @@ export function Header({
           ) : (
             <button
               onClick={onOpenProjectManager}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-black font-bold rounded-lg text-xs transition-all shadow-md cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-black font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer active:scale-[0.98]"
             >
               <Key className="w-3.5 h-3.5" />
               <span>Desbloquear com Código</span>
@@ -175,25 +184,42 @@ export function Header({
 
           <button
             onClick={onOpenProgramIngestion}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-black font-bold rounded-lg text-xs transition-all shadow-lg cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-black font-bold rounded-xl text-xs transition-all shadow-lg cursor-pointer active:scale-[0.98]"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Novo Bug Bounty</span>
           </button>
+
+          {/* User Profile & Logout (iOS Pill) */}
+          {currentUser && onLogout && (
+            <div className="flex items-center gap-1.5 pl-2 border-l border-zinc-800">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900/60 border border-zinc-800 text-xs text-zinc-300">
+                <UserIcon className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="font-semibold text-zinc-200">{currentUser.username}</span>
+              </div>
+              <button
+                onClick={onLogout}
+                className="p-1.5 rounded-xl bg-zinc-900/60 hover:bg-red-950/60 border border-zinc-800 hover:border-red-800/80 text-zinc-400 hover:text-red-300 transition-colors cursor-pointer active:scale-[0.98]"
+                title="Encerrar Sessão Segura"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Main Navigation and Metric Strip (When Unlocked) */}
       {currentProject && (
-        <div className="max-w-7xl mx-auto px-4 py-1.5 flex flex-wrap items-center justify-between gap-4">
-          {/* Navigation Tabs */}
+        <div className="max-w-7xl mx-auto px-4 py-2 flex flex-wrap items-center justify-between gap-4">
+          {/* Navigation Tabs (iOS-style Segmented Control) */}
           <nav className="flex items-center gap-1 text-xs overflow-x-auto py-0.5">
             <button
               onClick={() => setActiveTab('dashboard')}
-              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
                 activeTab === 'dashboard'
-                  ? 'bg-zinc-800 text-zinc-100 font-medium shadow-sm ring-1 ring-zinc-700'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                  ? 'bg-zinc-800 text-zinc-100 font-bold shadow-sm ring-1 ring-zinc-700'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60'
               }`}
             >
               <Activity className="w-3.5 h-3.5 text-emerald-400" />
@@ -202,7 +228,7 @@ export function Header({
 
             <button
               onClick={() => setActiveTab('terminal')}
-              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
                 activeTab === 'terminal'
                   ? 'bg-emerald-950/80 text-emerald-300 font-bold shadow-sm ring-1 ring-emerald-500/60'
                   : 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/30'
@@ -215,10 +241,10 @@ export function Header({
 
             <button
               onClick={() => setActiveTab('flowchart')}
-              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
                 activeTab === 'flowchart'
-                  ? 'bg-zinc-800 text-emerald-300 font-medium shadow-sm ring-1 ring-emerald-500/50'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                  ? 'bg-zinc-800 text-emerald-300 font-bold shadow-sm ring-1 ring-emerald-500/50'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60'
               }`}
             >
               <GitBranch className="w-3.5 h-3.5 text-emerald-400" />
@@ -227,10 +253,10 @@ export function Header({
 
             <button
               onClick={() => setActiveTab('workbench')}
-              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
                 activeTab === 'workbench'
-                  ? 'bg-zinc-800 text-cyan-300 font-medium shadow-sm ring-1 ring-cyan-500/50'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                  ? 'bg-zinc-800 text-cyan-300 font-bold shadow-sm ring-1 ring-cyan-500/50'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60'
               }`}
             >
               <Radio className="w-3.5 h-3.5 text-cyan-400" />
@@ -239,10 +265,10 @@ export function Header({
 
             <button
               onClick={() => setActiveTab('graph')}
-              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
                 activeTab === 'graph'
-                  ? 'bg-zinc-800 text-zinc-100 font-medium shadow-sm ring-1 ring-zinc-700'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                  ? 'bg-zinc-800 text-zinc-100 font-bold shadow-sm ring-1 ring-zinc-700'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60'
               }`}
             >
               <Cpu className="w-3.5 h-3.5 text-purple-400" />
@@ -251,10 +277,10 @@ export function Header({
 
             <button
               onClick={() => setActiveTab('assets')}
-              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
                 activeTab === 'assets'
-                  ? 'bg-zinc-800 text-zinc-100 font-medium shadow-sm ring-1 ring-zinc-700'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                  ? 'bg-zinc-800 text-zinc-100 font-bold shadow-sm ring-1 ring-zinc-700'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60'
               }`}
             >
               <Database className="w-3.5 h-3.5 text-amber-400" />
@@ -263,10 +289,10 @@ export function Header({
 
             <button
               onClick={() => setActiveTab('pipeline')}
-              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
                 activeTab === 'pipeline'
-                  ? 'bg-zinc-800 text-zinc-100 font-medium shadow-sm ring-1 ring-zinc-700'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                  ? 'bg-zinc-800 text-zinc-100 font-bold shadow-sm ring-1 ring-zinc-700'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60'
               }`}
             >
               <Terminal className="w-3.5 h-3.5 text-emerald-400" />
@@ -275,7 +301,7 @@ export function Header({
 
             <button
               onClick={() => setActiveTab('drive')}
-              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
                 activeTab === 'drive'
                   ? 'bg-blue-950/80 border border-blue-500/70 text-blue-300 font-bold shadow-sm'
                   : 'text-blue-400 hover:text-blue-300 hover:bg-blue-950/30'
@@ -288,16 +314,16 @@ export function Header({
 
           {/* Quick Metrics & Actions */}
           <div className="flex items-center gap-2 text-xs">
-            <div className="px-2.5 py-1 bg-zinc-900 border border-zinc-800 rounded-md text-zinc-300">
+            <div className="px-3 py-1.5 bg-zinc-900/80 border border-zinc-800 rounded-xl text-zinc-300">
               <span className="text-zinc-500">Vivos:</span> <strong className="text-emerald-400">{aliveCount}</strong>/{totalAssets}
             </div>
 
-            <div className="px-2.5 py-1 bg-zinc-900 border border-zinc-800 rounded-md text-zinc-300">
+            <div className="px-3 py-1.5 bg-zinc-900/80 border border-zinc-800 rounded-xl text-zinc-300">
               <span className="text-zinc-500">Vulns:</span> <strong className={vulnCount > 0 ? 'text-red-400' : 'text-zinc-300'}>{vulnCount}</strong>
             </div>
 
             {takeoverCount > 0 && (
-              <div className="px-2.5 py-1 bg-red-950/60 border border-red-800/80 rounded-md text-red-300 animate-pulse">
+              <div className="px-3 py-1.5 bg-red-950/60 border border-red-800/80 rounded-xl text-red-300 animate-pulse">
                 <span>Takeovers:</span> <strong>{takeoverCount}</strong>
               </div>
             )}
@@ -305,7 +331,7 @@ export function Header({
             <div className="flex items-center gap-1.5 pl-2 border-l border-zinc-800">
               <button
                 onClick={onOpenScope}
-                className="flex items-center gap-1 px-2.5 py-1 bg-amber-950/40 hover:bg-amber-900/50 border border-amber-800/60 rounded-md text-amber-300 text-xs transition-colors cursor-pointer"
+                className="flex items-center gap-1 px-3 py-1.5 bg-amber-950/40 hover:bg-amber-900/50 border border-amber-800/60 rounded-xl text-amber-300 text-xs transition-colors cursor-pointer active:scale-[0.98]"
                 title="Regras de Escopo"
               >
                 <ShieldAlert className="w-3.5 h-3.5" />
@@ -314,7 +340,7 @@ export function Header({
 
               <button
                 onClick={onOpenAiTriage}
-                className="flex items-center gap-1 px-2.5 py-1 bg-purple-950/50 hover:bg-purple-900/60 border border-purple-700/60 rounded-md text-purple-200 text-xs transition-colors cursor-pointer"
+                className="flex items-center gap-1 px-3 py-1.5 bg-purple-950/50 hover:bg-purple-900/60 border border-purple-700/60 rounded-xl text-purple-200 text-xs transition-colors cursor-pointer active:scale-[0.98]"
                 title="AI Triage"
               >
                 <Sparkles className="w-3.5 h-3.5 text-purple-400" />
@@ -323,7 +349,7 @@ export function Header({
 
               <button
                 onClick={onOpenIngestion}
-                className="flex items-center gap-1 px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-md text-zinc-200 text-xs transition-colors cursor-pointer"
+                className="flex items-center gap-1 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-zinc-200 text-xs transition-colors cursor-pointer active:scale-[0.98]"
                 title="Ingerir dados de ferramentas (Subfinder, Httpx, Nmap, Nuclei)"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -332,7 +358,7 @@ export function Header({
 
               <button
                 onClick={onOpenExport}
-                className="p-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-md text-zinc-300 transition-colors cursor-pointer"
+                className="p-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-zinc-300 transition-colors cursor-pointer active:scale-[0.98]"
                 title="Exportar Relatório e Superfície"
               >
                 <Download className="w-3.5 h-3.5" />

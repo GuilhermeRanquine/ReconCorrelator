@@ -30,9 +30,13 @@ export interface BugBountyPolicy {
   programUrl?: string;
   policySummary: string;
   safeHarbor: boolean;
+  safeHarborTerms?: string;
   bountyTiers?: BountyTier[];
   requiredHeaders?: { key: string; value: string; description?: string }[];
+  permittedAttacks?: string[];
   prohibitedVulns: string[];
+  allowedTargetTypes?: string[];
+  reconStrategy?: string[];
   maxRateLimitReqSec?: number;
   targetArchitecture?: 'spa_web' | 'microservices_api' | 'cloud_native' | 'hybrid' | 'mobile_backend';
   extractedAt: string;

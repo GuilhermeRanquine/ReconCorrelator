@@ -1,6 +1,19 @@
 {
-  "version": 2,
-  "lastUpdated": "2026-08-26T04:40:00.000Z",
+  "version": 3,
+  "engine": "SQL-Relational-v3",
+  "lastUpdated": "2026-08-26T05:28:18.888Z",
+  "users": [
+    {
+      "id": "user-ranquine-001",
+      "username": "ranquine",
+      "passwordHash": "7da98fcf810462bebb5ba11ea06423775741af952e301be8e8271bad471ed72f758f2f5c33aff7d009df2a987ac8aba24f966fd80112b80c8815b99b02e21b17",
+      "salt": "56eb64323ac53df8915a3058a4a8b60a76496ae78fb6aea455812481cc0bedfe",
+      "role": "admin",
+      "createdAt": "2026-08-26T05:28:18.888Z",
+      "updatedAt": "2026-08-26T05:28:18.888Z"
+    }
+  ],
+  "sessions": [],
   "projects": [],
   "assets": [],
   "reconCache": [],
@@ -8,6 +21,15 @@
   "terminalFolders": [],
   "reports": [],
   "auditLogs": [
+    {
+      "id": "audit-init-1787722099109",
+      "userId": "user-ranquine-001",
+      "action": "SQL_DATABASE_MIGRATED",
+      "details": {
+        "message": "Database migrated to SQL Relational Schema v3 with seeded ranquine user."
+      },
+      "timestamp": "2026-08-26T05:28:18.888Z"
+    },
     {
       "id": "audit-clean-slate",
       "timestamp": "2026-08-26T04:40:00.000Z",
