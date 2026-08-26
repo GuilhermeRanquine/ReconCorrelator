@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { WebTech } from '@/types/recon';
+import { getCachedRecon, setCachedRecon, upsertAssets } from '@/lib/db';
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { url, timeoutMs = 6000 } = body;
+    const body = await req.json().catch(() => ({}));
+    const { url, timeoutMs = 6000, forceRefresh = false } = body;
 
     if (!url) {
       return NextResponse.json({ error: 'URL é obrigatória' }, { status: 400 });
@@ -13,6 +14,19 @@ export async function POST(req: NextRequest) {
     let targetUrl = url.trim();
     if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
       targetUrl = `https://${targetUrl}`;
+    }
+
+    const hostExtract = targetUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '').toLowerCase();
+
+    // 1. Check Recon Cache
+    if (!forceRefresh) {
+      const cached = getCachedRecon('http-probe', hostExtract);
+      if (cached) {
+        return NextResponse.json({
+          ...cached,
+          fromCache: true,
+        });
+      }
     }
 
     const controller = new AbortController();
@@ -32,7 +46,7 @@ export async function POST(req: NextRequest) {
       const response = await fetch(targetUrl, {
         method: 'GET',
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 ReconCorrelator-Squad/3.4',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 ReconCorrelator-Squad/3.5',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.5',
         },
@@ -52,7 +66,7 @@ export async function POST(req: NextRequest) {
       contentType = headers['content-type'] || '';
       contentLength = parseInt(headers['content-length'] || '0', 10);
 
-      // Read a snippet of text to extract title & tech markers
+      // Read snippet to extract title & tech markers
       const htmlText = await response.text();
       const titleMatch = htmlText.match(/<title[^>]*>([^<]+)<\/title>/i);
       if (titleMatch) {
@@ -106,7 +120,7 @@ export async function POST(req: NextRequest) {
       accessControlAllowOrigin: headers['access-control-allow-origin'] || null,
     };
 
-    return NextResponse.json({
+    const result = {
       success: true,
       targetUrl,
       finalUrl,
@@ -121,6 +135,33 @@ export async function POST(req: NextRequest) {
       securityHeaders,
       technologies,
       probedAt: new Date().toISOString(),
+    };
+
+    // 2. Cache in DB (60 min TTL)
+    setCachedRecon('http-probe', hostExtract, result, 60);
+
+    // 3. Upsert into assets table in DB
+    try {
+      upsertAssets([
+        {
+          subdomain: hostExtract,
+          isAlive: status > 0,
+          httpStatus: status,
+          httpTitle: title,
+          webServer: server,
+          contentType,
+          contentLength,
+          technologies,
+          tags: status > 0 ? ['http-alive'] : ['http-unreachable'],
+        }
+      ]);
+    } catch (dbErr) {
+      console.warn('Could not auto-upsert HTTP probe result to DB:', dbErr);
+    }
+
+    return NextResponse.json({
+      ...result,
+      fromCache: false,
     });
   } catch (err: any) {
     console.error('HTTP Probe error:', err);

@@ -129,40 +129,58 @@ export function TerminalArsenal({
   const terminalBodyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Initial load from localStorage per target
+  // Initial load from Central DB with LocalStorage fallback
   useEffect(() => {
-    try {
-      const savedFolders = localStorage.getItem(`recon_folders_${target.id}`);
-      const savedSessions = localStorage.getItem(`recon_sessions_${target.id}`);
-      const savedHistory = localStorage.getItem(`recon_history_${target.id}`);
-
-      if (savedFolders) {
-        setFolders(JSON.parse(savedFolders));
-      } else {
-        setFolders(DEFAULT_FOLDERS);
-      }
-
-      if (savedSessions) {
-        const parsed = JSON.parse(savedSessions);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setSessions(parsed);
-          setActiveSessionId(parsed[0].id);
+    let isMounted = true;
+    const loadFromDb = async () => {
+      try {
+        const res = await fetch(`/api/db/terminal?projectId=${encodeURIComponent(target.id)}`);
+        const data = await res.json();
+        if (isMounted && data.success && Array.isArray(data.sessions) && data.sessions.length > 0) {
+          setSessions(data.sessions);
+          setActiveSessionId(data.sessions[0].id);
+          if (Array.isArray(data.folders) && data.folders.length > 0) {
+            setFolders(data.folders);
+          }
           return;
         }
+      } catch (dbErr) {
+        console.warn('Could not fetch terminal sessions from central DB, checking local storage:', dbErr);
       }
 
-      // Default initial session
-      const initialSession: TerminalSession = {
-        id: `sess-${Date.now()}`,
-        name: `Recon Shell (${target.domain})`,
-        folderId: 'recon-osint',
-        pinned: true,
-        createdAt: new Date().toISOString(),
-        lines: [
-          {
-            id: 'init-banner',
-            type: 'banner',
-            text: `
+      // Fallback to localStorage
+      try {
+        const savedFolders = localStorage.getItem(`recon_folders_${target.id}`);
+        const savedSessions = localStorage.getItem(`recon_sessions_${target.id}`);
+        const savedHistory = localStorage.getItem(`recon_history_${target.id}`);
+
+        if (savedFolders) {
+          setFolders(JSON.parse(savedFolders));
+        } else {
+          setFolders(DEFAULT_FOLDERS);
+        }
+
+        if (savedSessions) {
+          const parsed = JSON.parse(savedSessions);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setSessions(parsed);
+            setActiveSessionId(parsed[0].id);
+            return;
+          }
+        }
+
+        // Default initial session
+        const initialSession: TerminalSession = {
+          id: `sess-${Date.now()}`,
+          name: `Recon Shell (${target.domain})`,
+          folderId: 'recon-osint',
+          pinned: true,
+          createdAt: new Date().toISOString(),
+          lines: [
+            {
+              id: 'init-banner',
+              type: 'banner',
+              text: `
  ██████╗ ███████╗ ██████╗ ██████╗ ███╗   ██╗     █████╗ ██████╗ ███████╗███████╗███╗   ██╗ █████╗ ██╗     
  ██╔══██╗██╔════╝██╔════╝██╔═══██╗████╗  ██║    ██╔══██╗██╔══██╗██╔════╝██╔════╝████╗  ██║██╔══██╗██║     
  ██████╔╝█████╗  ██║     ██║   ██║██╔██╗ ██║    ███████║██████╔╝███████╗█████╗  ██╔██╗ ██║███████║██║     
@@ -171,41 +189,56 @@ export function TerminalArsenal({
  ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝    ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝
         [+] Bug Bounty RedTeam Shell v4.5 | Alvo Ativo: ${target.domain}
         [+] Header Ativo: ${activeHeader}
+        [+] Conectado ao Central Server DB (Persistência Contínua & Caching Idempotente Ativo)
         [+] Suporta comandos de rede (crtsh, dnsx, httpx, wayback, nuclei) e prompts de IA Gemini!
         [+] Digite 'help' para comandos ou faça perguntas diretamente em linguagem natural.
-            `,
-            timestamp: new Date().toLocaleTimeString(),
-          }
-        ]
-      };
-      setSessions([initialSession]);
-      setActiveSessionId(initialSession.id);
+              `,
+              timestamp: new Date().toLocaleTimeString(),
+            }
+          ]
+        };
+        setSessions([initialSession]);
+        setActiveSessionId(initialSession.id);
 
-      if (savedHistory) {
-        setHistory(JSON.parse(savedHistory));
+        if (savedHistory) {
+          setHistory(JSON.parse(savedHistory));
+        }
+      } catch (e) {
+        console.warn('LocalStorage error in TerminalArsenal:', e);
       }
-    } catch (e) {
-      console.warn('LocalStorage error in TerminalArsenal:', e);
-    }
-  }, [target.id]);
+    };
 
-  // Persist folders
+    loadFromDb();
+    return () => { isMounted = false; };
+  }, [target.id, target.domain, activeHeader]);
+
+  // Persist folders to DB and fallback localStorage
   const saveFolders = (newFolders: TerminalFolder[]) => {
     setFolders(newFolders);
     try {
       localStorage.setItem(`recon_folders_${target.id}`, JSON.stringify(newFolders));
+      fetch('/api/db/terminal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: target.id, folders: newFolders, sessions }),
+      }).catch(err => console.warn('Could not save folders to central DB:', err));
     } catch (e) {
-      console.warn('LocalStorage save error:', e);
+      console.warn('Folder save error:', e);
     }
   };
 
-  // Persist sessions
+  // Persist sessions to DB and fallback localStorage
   const saveSessions = (newSessions: TerminalSession[]) => {
     setSessions(newSessions);
     try {
       localStorage.setItem(`recon_sessions_${target.id}`, JSON.stringify(newSessions));
+      fetch('/api/db/terminal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: target.id, sessions: newSessions, folders }),
+      }).catch(err => console.warn('Could not save sessions to central DB:', err));
     } catch (e) {
-      console.warn('LocalStorage save error:', e);
+      console.warn('Session save error:', e);
     }
   };
 

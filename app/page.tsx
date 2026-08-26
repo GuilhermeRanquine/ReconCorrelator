@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { TargetProject, CorrelatedAsset, Vulnerability, ReconFlowStep } from '@/types/recon';
 import { SAMPLE_PROJECTS, SAMPLE_ASSETS } from '@/lib/sampleData';
 import { Header, ReconTab } from '@/components/Header';
@@ -12,6 +12,7 @@ import { ReconFlowchart } from '@/components/ReconFlowchart';
 import { LiveReconWorkbench } from '@/components/LiveReconWorkbench';
 import { TerminalArsenal } from '@/components/TerminalArsenal';
 import { GoogleDriveHub } from '@/components/GoogleDriveHub';
+import { NexusReportsViewer } from '@/components/NexusReportsViewer';
 import { ProgramIngestionModal } from '@/components/ProgramIngestionModal';
 import { DataIngestionModal } from '@/components/DataIngestionModal';
 import { ScopeManagerModal } from '@/components/ScopeManagerModal';
@@ -46,14 +47,16 @@ import {
   ShieldCheck,
   Lock,
   HardDrive,
-  FolderKanban
+  FolderKanban,
+  Bot
 } from 'lucide-react';
 
 export default function ReconCorrelatorApp() {
   const [projects, setProjects] = useState<TargetProject[]>(SAMPLE_PROJECTS);
   const [currentProject, setCurrentProject] = useState<TargetProject>(SAMPLE_PROJECTS[0]);
-  const [assets, setAssets] = useState<CorrelatedAsset[]>(SAMPLE_ASSETS);
+  const [assets, setAssets] = useState<CorrelatedAsset[]>([]);
   const [activeTab, setActiveTab] = useState<ReconTab>('dashboard');
+  const [isDbLoaded, setIsDbLoaded] = useState(false);
 
   // Modals
   const [isProgramIngestionOpen, setIsProgramIngestionOpen] = useState(false);
@@ -64,89 +67,132 @@ export default function ReconCorrelatorApp() {
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [selectedAssetForAi, setSelectedAssetForAi] = useState<CorrelatedAsset | null>(null);
 
-  // LocalStorage initialization & sync
-  React.useEffect(() => {
+  // 1. Initial Load from Server-Side Central Database
+  const fetchDatabaseProjects = useCallback(async () => {
     try {
-      const savedProjects = localStorage.getItem('recon_projects');
-      if (savedProjects) {
-        const parsed = JSON.parse(savedProjects);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setProjects(parsed);
-          setCurrentProject(parsed[0]);
-        }
-      }
-      const savedAssets = localStorage.getItem('recon_assets');
-      if (savedAssets) {
-        const parsedAssets = JSON.parse(savedAssets);
-        if (Array.isArray(parsedAssets)) {
-          setAssets(parsedAssets);
-        }
+      const res = await fetch('/api/db/projects');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.projects) && data.projects.length > 0) {
+        setProjects(data.projects);
+        return data.projects;
       }
     } catch (e) {
-      console.warn('Could not read from localStorage', e);
+      console.warn('Could not fetch projects from DB, using fallback:', e);
+    }
+    return SAMPLE_PROJECTS;
+  }, []);
+
+  const fetchDatabaseAssets = useCallback(async (project: TargetProject) => {
+    try {
+      const res = await fetch(`/api/db/assets?projectId=${encodeURIComponent(project.id)}&domain=${encodeURIComponent(project.domain)}`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.assets)) {
+        setAssets(data.assets);
+        return;
+      }
+    } catch (e) {
+      console.warn('Could not fetch assets from DB, fallback:', e);
     }
   }, []);
 
-  // Save to localStorage
-  const saveProjectsToStorage = (updated: TargetProject[]) => {
-    setProjects(updated);
+  // Initialize DB on mount
+  useEffect(() => {
+    let isMounted = true;
+    const initialize = async () => {
+      const dbProjects = await fetchDatabaseProjects();
+      if (!isMounted) return;
+
+      const active = dbProjects[0] || SAMPLE_PROJECTS[0];
+      setCurrentProject(active);
+      await fetchDatabaseAssets(active);
+      setIsDbLoaded(true);
+    };
+
+    initialize();
+    return () => { isMounted = false; };
+  }, [fetchDatabaseProjects, fetchDatabaseAssets]);
+
+  // When active target changes, load its assets directly from central DB
+  const handleSelectProject = (project: TargetProject) => {
+    setCurrentProject(project);
+    fetchDatabaseAssets(project);
+  };
+
+  // 2. Persist project changes to central DB
+  const persistProjectToDb = async (project: TargetProject) => {
     try {
-      localStorage.setItem('recon_projects', JSON.stringify(updated));
+      await fetch('/api/db/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(project),
+      });
     } catch (e) {
-      console.warn('Could not save projects to localStorage', e);
+      console.warn('Could not persist project to DB:', e);
     }
   };
 
-  const saveAssetsToStorage = (updated: CorrelatedAsset[]) => {
-    setAssets(updated);
-    try {
-      localStorage.setItem('recon_assets', JSON.stringify(updated));
-    } catch (e) {
-      console.warn('Could not save assets to localStorage', e);
-    }
-  };
-
-  // Statistics
+  // 3. Statistics computed from DB-backed state
   const totalAssets = assets.length;
   const aliveCount = assets.filter(a => a.isAlive).length;
-  const allVulns = assets.flatMap(a => a.vulnerabilities);
+  const allVulns = assets.flatMap(a => a.vulnerabilities || []);
   const vulnCount = allVulns.length;
   const criticalVulns = allVulns.filter(v => v.severity === 'critical' || v.severity === 'high').length;
   const takeoverCount = assets.filter(a => a.takeoverRisk).length;
-  const totalPorts = assets.reduce((acc, a) => acc + a.ports.length, 0);
+  const totalPorts = assets.reduce((acc, a) => acc + (a.ports?.length || 0), 0);
 
   const handleOpenAiForAsset = (asset: CorrelatedAsset) => {
     setSelectedAssetForAi(asset);
     setIsAiTriageOpen(true);
   };
 
-  const handleIngestSuccess = (newAssets: CorrelatedAsset[]) => {
-    saveAssetsToStorage(newAssets);
+  const handleIngestSuccess = async (newAssets: CorrelatedAsset[]) => {
+    try {
+      const res = await fetch('/api/db/assets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assets: newAssets, rootDomain: currentProject.domain }),
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.assets)) {
+        setAssets(data.assets.filter(a => a.rootDomain === currentProject.domain || a.subdomain.endsWith(`.${currentProject.domain}`)));
+      } else {
+        setAssets(newAssets);
+      }
+    } catch {
+      setAssets(newAssets);
+    }
   };
 
-  const handleUpdateScope = (updatedTarget: TargetProject) => {
+  const handleUpdateScope = async (updatedTarget: TargetProject) => {
     setCurrentProject(updatedTarget);
     const updatedList = projects.map(p => p.id === updatedTarget.id ? updatedTarget : p);
-    saveProjectsToStorage(updatedList);
+    setProjects(updatedList);
+    await persistProjectToDb(updatedTarget);
   };
 
-  const handleProgramCreated = (newProject: TargetProject) => {
+  const handleProgramCreated = async (newProject: TargetProject) => {
     const updatedList = [newProject, ...projects.filter(p => p.id !== newProject.id)];
-    saveProjectsToStorage(updatedList);
+    setProjects(updatedList);
     setCurrentProject(newProject);
-    saveAssetsToStorage([]); // Clean slate for real Bug Bounty recon
+    setAssets([]); // Clean slate for new target
+    await persistProjectToDb(newProject);
     setActiveTab('flowchart');
   };
 
-  const handleDeleteProject = (projectId: string) => {
+  const handleDeleteProject = async (projectId: string) => {
+    try {
+      await fetch(`/api/db/projects?id=${encodeURIComponent(projectId)}`, { method: 'DELETE' });
+    } catch (err) {
+      console.warn('Could not delete project on DB:', err);
+    }
+
     const remaining = projects.filter(p => p.id !== projectId);
     if (remaining.length > 0) {
-      saveProjectsToStorage(remaining);
+      setProjects(remaining);
       if (currentProject.id === projectId) {
-        setCurrentProject(remaining[0]);
+        handleSelectProject(remaining[0]);
       }
     } else {
-      // If user deleted all, create a clean default real project
       const blankProj: TargetProject = {
         id: `target-${Date.now()}`,
         name: 'Novo Programa',
@@ -168,19 +214,19 @@ export default function ReconCorrelatorApp() {
         },
         isDemo: false,
       };
-      saveProjectsToStorage([blankProj]);
+      setProjects([blankProj]);
       setCurrentProject(blankProj);
-      saveAssetsToStorage([]);
+      setAssets([]);
+      await persistProjectToDb(blankProj);
     }
   };
 
-  const handleClearDemoProjects = () => {
+  const handleClearDemoProjects = async () => {
     const onlyReal = projects.filter(p => !p.isDemo && !p.id.includes('demo') && p.domain !== 'acmefinance.io' && p.domain !== 'cyberbank.corp');
     if (onlyReal.length > 0) {
-      saveProjectsToStorage(onlyReal);
-      setCurrentProject(onlyReal[0]);
+      setProjects(onlyReal);
+      handleSelectProject(onlyReal[0]);
     } else {
-      // If all were demos, leave 1 clean real target
       const blankProj: TargetProject = {
         id: `target-${Date.now()}`,
         name: 'Meu Alvo de Bug Bounty',
@@ -202,41 +248,60 @@ export default function ReconCorrelatorApp() {
         },
         isDemo: false,
       };
-      saveProjectsToStorage([blankProj]);
+      setProjects([blankProj]);
       setCurrentProject(blankProj);
+      setAssets([]);
+      await persistProjectToDb(blankProj);
     }
-    saveAssetsToStorage([]); // Clear mock demo assets
   };
 
-  const handleCreateNewProject = (newProj: TargetProject) => {
+  const handleCreateNewProject = async (newProj: TargetProject) => {
     const updated = [newProj, ...projects];
-    saveProjectsToStorage(updated);
+    setProjects(updated);
     setCurrentProject(newProj);
-    saveAssetsToStorage([]);
+    setAssets([]);
+    await persistProjectToDb(newProj);
     setActiveTab('dashboard');
   };
 
-  const handleClearWorkspace = () => {
-    saveAssetsToStorage([]);
+  const handleClearWorkspace = async () => {
+    try {
+      await fetch('/api/db/assets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'clear', domain: currentProject.domain }),
+      });
+    } catch (e) {
+      console.warn('Could not clear assets in DB:', e);
+    }
+    setAssets([]);
   };
 
-  const handleLoadDemoSandbox = () => {
-    saveProjectsToStorage(SAMPLE_PROJECTS);
+  const handleLoadDemoSandbox = async () => {
+    setProjects(SAMPLE_PROJECTS);
     setCurrentProject(SAMPLE_PROJECTS[0]);
-    saveAssetsToStorage(SAMPLE_ASSETS);
+    setAssets(SAMPLE_ASSETS);
+    // Upsert demo assets to DB
+    try {
+      await fetch('/api/db/assets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assets: SAMPLE_ASSETS, rootDomain: SAMPLE_PROJECTS[0].domain }),
+      });
+    } catch (e) {
+      console.warn('Could not persist sample assets to DB:', e);
+    }
   };
 
-  // Merge discovered assets seamlessly
-  const handleAssetsDiscovered = (newStubs: Partial<CorrelatedAsset>[]) => {
+  // 4. Merge and persist discovered assets seamlessly into DB
+  const handleAssetsDiscovered = async (newStubs: Partial<CorrelatedAsset>[]) => {
+    if (!newStubs || newStubs.length === 0) return;
+
+    // Optimistic UI update
     setAssets(prev => {
       const mergedMap = new Map<string, CorrelatedAsset>();
-      
-      // Index existing
-      for (const a of prev) {
-        mergedMap.set(a.subdomain.toLowerCase(), a);
-      }
+      for (const a of prev) mergedMap.set(a.subdomain.toLowerCase(), a);
 
-      // Merge new
       for (const stub of newStubs) {
         if (!stub.subdomain) continue;
         const key = stub.subdomain.toLowerCase();
@@ -253,8 +318,8 @@ export default function ReconCorrelatorApp() {
             contentLength: stub.contentLength ?? existing.contentLength,
             ips: Array.from(new Set([...existing.ips, ...(stub.ips || [])])),
             cnames: Array.from(new Set([...existing.cnames, ...(stub.cnames || [])])),
-            ports: [...existing.ports, ...(stub.ports || [])],
-            technologies: [...existing.technologies, ...(stub.technologies || [])],
+            ports: stub.ports && stub.ports.length > 0 ? stub.ports : existing.ports,
+            technologies: stub.technologies && stub.technologies.length > 0 ? stub.technologies : existing.technologies,
             tags: Array.from(new Set([...existing.tags, ...(stub.tags || [])])),
             takeoverRisk: stub.takeoverRisk ?? existing.takeoverRisk,
             takeoverDetails: stub.takeoverDetails ?? existing.takeoverDetails,
@@ -286,23 +351,55 @@ export default function ReconCorrelatorApp() {
           });
         }
       }
-
       return Array.from(mergedMap.values());
     });
+
+    // Central Server Database Upsert (ACID Persistence)
+    try {
+      const res = await fetch('/api/db/assets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assets: newStubs, rootDomain: currentProject.domain }),
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.assets)) {
+        // Sync filtered assets for current project
+        const filtered = data.assets.filter((a: CorrelatedAsset) => 
+          a.rootDomain?.toLowerCase() === currentProject.domain.toLowerCase() ||
+          a.subdomain?.toLowerCase().endsWith(`.${currentProject.domain.toLowerCase()}`) ||
+          a.subdomain?.toLowerCase() === currentProject.domain.toLowerCase()
+        );
+        setAssets(filtered);
+      }
+    } catch (dbErr) {
+      console.warn('Background DB sync warning:', dbErr);
+    }
   };
 
-  const handleAddVulnerability = (vuln: Vulnerability) => {
+  const handleAddVulnerability = async (vuln: Vulnerability) => {
+    // Optimistic UI update
     setAssets(prev => {
       return prev.map(a => {
         if (a.subdomain === vuln.matchedAt || vuln.matchedAt.includes(a.subdomain)) {
           return {
             ...a,
-            vulnerabilities: [vuln, ...a.vulnerabilities.filter(v => v.id !== vuln.id)],
+            vulnerabilities: [vuln, ...(a.vulnerabilities || []).filter(v => v.id !== vuln.id)],
           };
         }
         return a;
       });
     });
+
+    // Central Server DB save
+    try {
+      await fetch('/api/db/assets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'add_vulnerability', vulnerability: vuln }),
+      });
+    } catch (dbErr) {
+      console.warn('Could not save vulnerability to central DB:', dbErr);
+    }
   };
 
   const handleExecuteAutomationFromStep = (action: string, step: ReconFlowStep) => {
@@ -315,7 +412,7 @@ export default function ReconCorrelatorApp() {
       <Header
         currentProject={currentProject}
         projects={projects}
-        onSelectProject={(p) => setCurrentProject(p)}
+        onSelectProject={handleSelectProject}
         onOpenIngestion={() => setIsIngestionOpen(true)}
         onOpenProgramIngestion={() => setIsProgramIngestionOpen(true)}
         onOpenProjectManager={() => setIsProjectManagerOpen(true)}
@@ -330,6 +427,7 @@ export default function ReconCorrelatorApp() {
         takeoverCount={takeoverCount}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        isDbConnected={isDbLoaded}
       />
 
       {/* Main Body View */}
@@ -344,7 +442,7 @@ export default function ReconCorrelatorApp() {
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                   <h2 className="font-bold text-base text-zinc-100">Superfície de Ataque Ativa: {currentProject.domain}</h2>
                   <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800 text-emerald-300 font-bold">
-                    OPSEC SAFE
+                    CENTRAL DB SYNCED
                   </span>
                   {currentProject.policy?.platform && (
                     <span className="text-[10px] uppercase px-2 py-0.5 rounded bg-cyan-950 border border-cyan-800 text-cyan-300">
@@ -372,6 +470,14 @@ export default function ReconCorrelatorApp() {
                 </button>
 
                 <button
+                  onClick={() => setActiveTab('reports')}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-indigo-950/80 hover:bg-indigo-900/80 text-indigo-300 font-bold rounded-xl text-xs border border-indigo-700/60 transition-colors cursor-pointer shadow-md"
+                >
+                  <Bot className="w-4 h-4 text-indigo-400" />
+                  <span>Nexus & Relatórios</span>
+                </button>
+
+                <button
                   onClick={() => setActiveTab('flowchart')}
                   className="flex items-center gap-1.5 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-emerald-400 font-bold rounded-xl text-xs border border-zinc-700 transition-colors cursor-pointer"
                 >
@@ -385,14 +491,6 @@ export default function ReconCorrelatorApp() {
                 >
                   <Radio className="w-4 h-4" />
                   <span>Workbench Ao Vivo</span>
-                </button>
-
-                <button
-                  onClick={() => setActiveTab('drive')}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-blue-950/60 hover:bg-blue-900/60 text-blue-300 font-bold rounded-xl text-xs border border-blue-800/80 transition-colors cursor-pointer"
-                >
-                  <HardDrive className="w-4 h-4 text-blue-400" />
-                  <span>Google Drive Vault</span>
                 </button>
               </div>
             </div>
@@ -461,17 +559,17 @@ export default function ReconCorrelatorApp() {
                 <div className="max-w-md mx-auto space-y-1">
                   <h3 className="text-base font-bold text-zinc-100">Espaço de Trabalho Limpo para {currentProject.domain}</h3>
                   <p className="text-xs text-zinc-400">
-                    Nenhum dado falso carregado. Inicie o reconhecimento com ferramentas reais ou ingira logs do seu terminal.
+                    Persistência central ativada. Inicie o reconhecimento com ferramentas reais no Terminal ou no Workbench.
                   </p>
                 </div>
 
                 <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
                   <button
-                    onClick={() => setActiveTab('flowchart')}
+                    onClick={() => setActiveTab('terminal')}
                     className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-black font-bold rounded-xl text-xs flex items-center gap-2 cursor-pointer shadow-lg"
                   >
-                    <GitBranch className="w-4 h-4" />
-                    <span>Abrir Fluxograma de Reconhecimento</span>
+                    <Terminal className="w-4 h-4" />
+                    <span>Abrir Terminal Linux & Arsenal</span>
                   </button>
 
                   <button
@@ -498,7 +596,7 @@ export default function ReconCorrelatorApp() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Cpu className="w-4 h-4 text-cyan-400" />
-                      <h3 className="font-bold text-zinc-200 text-sm">Visualizador da Superfície de Ataque Correlacionada</h3>
+                      <h3 className="font-bold text-zinc-200 text-sm">Visualizador da Superfície de Ataque Correlacionada (Banco Central)</h3>
                     </div>
                     <button
                       onClick={() => setActiveTab('graph')}
@@ -527,7 +625,7 @@ export default function ReconCorrelatorApp() {
                       <button
                         onClick={handleClearWorkspace}
                         className="text-xs text-zinc-500 hover:text-red-400 flex items-center gap-1 cursor-pointer"
-                        title="Limpar todos os ativos e começar do zero"
+                        title="Limpar todos os ativos do banco e começar do zero"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                         <span>Limpar Workspace</span>
@@ -544,10 +642,10 @@ export default function ReconCorrelatorApp() {
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     {assets
-                      .filter(a => a.takeoverRisk || a.vulnerabilities.some(v => v.severity === 'critical' || v.severity === 'high'))
+                      .filter(a => a.takeoverRisk || (a.vulnerabilities && a.vulnerabilities.some(v => v.severity === 'critical' || v.severity === 'high')))
                       .slice(0, 3)
                       .map((asset) => {
-                        const topVuln = asset.vulnerabilities[0];
+                        const topVuln = asset.vulnerabilities?.[0];
                         return (
                           <div
                             key={asset.id}
@@ -587,9 +685,19 @@ export default function ReconCorrelatorApp() {
               assets={assets}
               onAssetsDiscovered={handleAssetsDiscovered}
               onAddVulnerability={handleAddVulnerability}
-              onSelectProject={setCurrentProject}
+              onSelectProject={handleSelectProject}
               onSwitchTab={setActiveTab}
               researcherHandle="w0rmingstar"
+            />
+          </div>
+        )}
+
+        {/* Tab: Nexus Autônomo & Relatórios */}
+        {activeTab === 'reports' && (
+          <div className="space-y-4">
+            <NexusReportsViewer
+              currentProject={currentProject}
+              onSelectProject={handleSelectProject}
             />
           </div>
         )}
@@ -640,7 +748,7 @@ export default function ReconCorrelatorApp() {
           <PipelineRunner
             target={currentProject}
             onJobFinished={(discovered) => {
-              if (discovered.length > 0) setAssets(discovered);
+              if (discovered.length > 0) handleAssetsDiscovered(discovered);
             }}
           />
         )}
@@ -659,7 +767,7 @@ export default function ReconCorrelatorApp() {
               try {
                 const parsed = JSON.parse(rawText);
                 if (parsed.assets && Array.isArray(parsed.assets)) {
-                  setAssets(parsed.assets);
+                  handleAssetsDiscovered(parsed.assets);
                   if (parsed.target) {
                     setCurrentProject(parsed.target);
                   }
@@ -684,7 +792,7 @@ export default function ReconCorrelatorApp() {
         onClose={() => setIsProjectManagerOpen(false)}
         projects={projects}
         currentProject={currentProject}
-        onSelectProject={(p) => setCurrentProject(p)}
+        onSelectProject={handleSelectProject}
         onDeleteProject={handleDeleteProject}
         onClearDemoProjects={handleClearDemoProjects}
         onCreateNewProject={handleCreateNewProject}

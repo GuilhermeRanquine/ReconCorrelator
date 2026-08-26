@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DnsRecord } from '@/types/recon';
+import { getCachedRecon, setCachedRecon, upsertAssets, addVulnerabilityToAsset } from '@/lib/db';
 
 // Subdomain Takeover Fingerprints
 const TAKEOVER_SERVICES: { cnameMatch: RegExp; service: string; hint: string }[] = [
@@ -51,7 +52,7 @@ async function queryDoH(name: string, type: string): Promise<any[]> {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    return handleDnsLookup(body.host || body.domain);
+    return handleDnsLookup(body.host || body.domain, body.forceRefresh);
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
@@ -61,13 +62,14 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const host = searchParams.get('host') || searchParams.get('domain');
-    return handleDnsLookup(host);
+    const forceRefresh = searchParams.get('refresh') === 'true';
+    return handleDnsLookup(host, forceRefresh);
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
 
-async function handleDnsLookup(host: string | null | undefined) {
+async function handleDnsLookup(host: string | null | undefined, forceRefresh: boolean = false) {
   try {
     if (!host) {
       return NextResponse.json({ error: 'Parâmetro host é obrigatório' }, { status: 400 });
@@ -75,7 +77,19 @@ async function handleDnsLookup(host: string | null | undefined) {
 
     const cleanHost = host.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
 
-    // Run parallel DoH queries for A, AAAA, CNAME, TXT, MX, NS
+    // 1. Check Recon Cache in DB
+    if (!forceRefresh) {
+      const cached = getCachedRecon('dns-lookup', cleanHost);
+      if (cached) {
+        return NextResponse.json({
+          ...cached,
+          fromCache: true,
+          source: 'DoH DNS [⚡ DB-CACHE HIT]',
+        });
+      }
+    }
+
+    // 2. Run parallel DoH queries for A, AAAA, CNAME, TXT, MX, NS
     const [aAnswers, aaaaAnswers, cnameAnswers, txtAnswers, mxAnswers, nsAnswers] = await Promise.all([
       queryDoH(cleanHost, 'A'),
       queryDoH(cleanHost, 'AAAA'),
@@ -167,10 +181,12 @@ async function handleDnsLookup(host: string | null | undefined) {
       cloudProvider = 'digitalocean';
     }
 
-    return NextResponse.json({
+    const isAlive = ips.length > 0 || cnames.length > 0;
+
+    const result = {
       success: true,
       host: cleanHost,
-      isAlive: ips.length > 0 || cnames.length > 0,
+      isAlive,
       ips: Array.from(new Set(ips)),
       cnames: Array.from(new Set(cnames)),
       dnsRecords,
@@ -179,6 +195,45 @@ async function handleDnsLookup(host: string | null | undefined) {
       takeoverDetails,
       takeoverService,
       resolvedAt: new Date().toISOString(),
+    };
+
+    // 3. Save in DB cache (60 min TTL)
+    setCachedRecon('dns-lookup', cleanHost, result, 60);
+
+    // 4. Update asset in DB
+    try {
+      upsertAssets([
+        {
+          subdomain: cleanHost,
+          isAlive,
+          ips: result.ips,
+          cnames: result.cnames,
+          cloudProvider,
+          takeoverRisk,
+          takeoverDetails: takeoverRisk ? takeoverDetails : undefined,
+          tags: isAlive ? ['dns-live'] : ['dns-unresolved'],
+        }
+      ]);
+
+      if (takeoverRisk) {
+        addVulnerabilityToAsset({
+          id: `vuln-takeover-${Date.now()}`,
+          templateId: 'takeover-cname-dangling',
+          name: `Potencial Subdomain Takeover (${takeoverService})`,
+          severity: 'high',
+          description: takeoverDetails,
+          matchedAt: cleanHost,
+          sourceTool: 'live-probe',
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (dbErr) {
+      console.warn('Could not auto-upsert DNS result to DB:', dbErr);
+    }
+
+    return NextResponse.json({
+      ...result,
+      fromCache: false,
     });
   } catch (err: any) {
     console.error('DNS Lookup Error:', err);

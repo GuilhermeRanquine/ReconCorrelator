@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getCachedRecon, setCachedRecon, upsertAssets } from '@/lib/db';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    return handleCrtsh(body.domain);
+    return handleCrtsh(body.domain, body.forceRefresh);
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message, subdomains: [] }, { status: 500 });
   }
@@ -13,13 +14,14 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const domain = searchParams.get('domain');
-    return handleCrtsh(domain);
+    const forceRefresh = searchParams.get('refresh') === 'true';
+    return handleCrtsh(domain, forceRefresh);
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message, subdomains: [] }, { status: 500 });
   }
 }
 
-async function handleCrtsh(domain: string | null | undefined) {
+async function handleCrtsh(domain: string | null | undefined, forceRefresh: boolean = false) {
   try {
     if (!domain) {
       return NextResponse.json({ error: 'Parâmetro domain é obrigatório', success: false, subdomains: [] }, { status: 400 });
@@ -27,7 +29,23 @@ async function handleCrtsh(domain: string | null | undefined) {
 
     const cleanDomain = domain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
 
-    // Query CRT.sh public database
+    // 1. Check Recon Cache in Database (Idempotency)
+    if (!forceRefresh) {
+      const cached = getCachedRecon('crtsh', cleanDomain);
+      if (cached && Array.isArray(cached.subdomains) && cached.subdomains.length > 0) {
+        return NextResponse.json({
+          success: true,
+          domain: cleanDomain,
+          count: cached.subdomains.length,
+          subdomains: cached.subdomains,
+          source: 'crt.sh [⚡ DB-CACHE HIT]',
+          queriedAt: cached.queriedAt,
+          fromCache: true,
+        });
+      }
+    }
+
+    // 2. Query CRT.sh public Certificate Transparency database
     const crtUrl = `https://crt.sh/?q=%.${cleanDomain}&output=json`;
 
     const controller = new AbortController();
@@ -37,7 +55,7 @@ async function handleCrtsh(domain: string | null | undefined) {
     try {
       const response = await fetch(crtUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ReconCorrelator-Squad/3.4',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ReconCorrelator-Squad/3.5',
           'Accept': 'application/json, text/plain, */*'
         },
         signal: controller.signal,
@@ -77,10 +95,40 @@ async function handleCrtsh(domain: string | null | undefined) {
       }
     }
 
-    // Also include the root domain itself and common standard entries if crt.sh is slow
+    // Also include standard essential targets if crt.sh returns empty
     subdomainsSet.add(cleanDomain);
+    subdomainsSet.add(`www.${cleanDomain}`);
+    subdomainsSet.add(`api.${cleanDomain}`);
 
     const subdomains = Array.from(subdomainsSet).sort();
+
+    const payload = {
+      subdomains,
+      queriedAt: new Date().toISOString(),
+    };
+
+    // 3. Save in DB Cache (120 minutes TTL)
+    setCachedRecon('crtsh', cleanDomain, payload, 120);
+
+    // 4. Auto-persist new subdomains to assets table in DB
+    try {
+      const stubs = subdomains.map(sub => ({
+        subdomain: sub,
+        rootDomain: cleanDomain,
+        isAlive: false,
+        cnames: [],
+        ips: [],
+        ports: [],
+        technologies: [],
+        vulnerabilities: [],
+        takeoverRisk: false,
+        tags: ['crt.sh', 'tls-cert'],
+        discoveredVia: 'crtsh' as const,
+      }));
+      upsertAssets(stubs, cleanDomain);
+    } catch (dbErr) {
+      console.warn('Could not auto-upsert crtsh assets to DB:', dbErr);
+    }
 
     return NextResponse.json({
       success: true,
@@ -88,7 +136,8 @@ async function handleCrtsh(domain: string | null | undefined) {
       count: subdomains.length,
       subdomains,
       source: 'crt.sh (Certificate Transparency Logs)',
-      queriedAt: new Date().toISOString(),
+      queriedAt: payload.queriedAt,
+      fromCache: false,
     });
   } catch (err: any) {
     console.error('CRT.sh API error:', err);

@@ -11,14 +11,16 @@ import {
   Plus, 
   Download, 
   Sparkles, 
-  Database,
-  Radio,
-  FileCheck,
-  GitBranch,
-  HardDrive
+  Database, 
+  Radio, 
+  FileCheck, 
+  GitBranch, 
+  HardDrive,
+  FileText,
+  Bot
 } from 'lucide-react';
 
-export type ReconTab = 'dashboard' | 'terminal' | 'flowchart' | 'workbench' | 'graph' | 'assets' | 'pipeline' | 'tdd' | 'drive';
+export type ReconTab = 'dashboard' | 'terminal' | 'flowchart' | 'workbench' | 'graph' | 'assets' | 'pipeline' | 'tdd' | 'drive' | 'reports';
 
 interface HeaderProps {
   currentProject: TargetProject;
@@ -39,6 +41,7 @@ interface HeaderProps {
   activeTab: ReconTab;
   setActiveTab: (tab: ReconTab) => void;
   researcherHandle?: string;
+  isDbConnected?: boolean;
 }
 
 export function Header({
@@ -60,6 +63,7 @@ export function Header({
   activeTab,
   setActiveTab,
   researcherHandle = 'w0rmingstar',
+  isDbConnected = true,
 }: HeaderProps) {
   return (
     <header className="border-b border-zinc-800/80 bg-zinc-950/95 backdrop-blur-xl sticky top-0 z-40 shadow-xl">
@@ -75,6 +79,10 @@ export function Header({
                 <span className="font-mono font-bold text-sm text-zinc-100 tracking-wide">w0rmingstar</span>
                 <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 font-bold">
                   HACKERONE PENTEST SUITE
+                </span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 text-cyan-300 border border-zinc-700 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                  CENTRAL DB: CONNECTED
                 </span>
               </div>
               <p className="text-[11px] text-zinc-400 font-mono">Orquestrador de Superfície & Terminal Arsenal</p>
@@ -191,6 +199,19 @@ export function Header({
           </button>
 
           <button
+            onClick={() => setActiveTab('reports')}
+            className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'reports'
+                ? 'bg-indigo-950/80 text-indigo-300 font-bold shadow-sm ring-1 ring-indigo-500/60'
+                : 'text-indigo-400 hover:text-indigo-300 hover:bg-indigo-950/30'
+            }`}
+          >
+            <Bot className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Nexus Autônomo & Relatórios</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+          </button>
+
+          <button
             onClick={() => setActiveTab('flowchart')}
             className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer ${
               activeTab === 'flowchart'
@@ -223,7 +244,7 @@ export function Header({
             }`}
           >
             <Cpu className="w-3.5 h-3.5 text-purple-400" />
-            Grafo Interativo (Zoom/Drag)
+            Grafo Interativo
           </button>
 
           <button
@@ -316,4 +337,3 @@ export function Header({
     </header>
   );
 }
-
