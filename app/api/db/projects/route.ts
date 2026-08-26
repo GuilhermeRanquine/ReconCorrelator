@@ -1,28 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProjects, upsertProject, deleteProject } from '@/lib/db';
+import { getProjects, saveProject, deleteProject, getProjectById } from '@/lib/db';
 import { TargetProject } from '@/types/recon';
 
 export async function GET(req: NextRequest) {
   try {
-    const projects = getProjects();
-    return NextResponse.json({ success: true, count: projects.length, projects });
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+
+    if (id) {
+      const project = await getProjectById(id);
+      if (!project) {
+        return NextResponse.json({ success: false, error: 'Projeto não encontrado' }, { status: 404 });
+      }
+      return NextResponse.json({ success: true, project });
+    }
+
+    const projects = await getProjects();
+    return NextResponse.json({ success: true, projects });
   } catch (err: any) {
-    console.error('Error fetching projects from DB:', err);
-    return NextResponse.json({ success: false, error: err.message, projects: [] }, { status: 500 });
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    if (!body || !body.name || !body.domain) {
-      return NextResponse.json({ success: false, error: 'Campos "name" e "domain" são obrigatórios.' }, { status: 400 });
+    const project = (await req.json()) as TargetProject;
+    if (!project || !project.name || !project.domain) {
+      return NextResponse.json({ success: false, error: 'Campos name e domain são obrigatórios' }, { status: 400 });
     }
 
-    const saved = upsertProject(body as TargetProject);
-    return NextResponse.json({ success: true, project: saved });
+    if (!project.id) {
+      project.id = `proj-${Date.now()}`;
+    }
+    if (!project.createdAt) {
+      project.createdAt = new Date().toISOString();
+    }
+
+    const updatedProjects = await saveProject(project);
+    return NextResponse.json({ success: true, project, projects: updatedProjects });
   } catch (err: any) {
-    console.error('Error saving project to DB:', err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
@@ -30,15 +46,14 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const projectId = searchParams.get('id');
-    if (!projectId) {
-      return NextResponse.json({ success: false, error: 'Parâmetro "id" é obrigatório.' }, { status: 400 });
+    const id = searchParams.get('id');
+    if (!id) {
+      return NextResponse.json({ success: false, error: 'ID é obrigatório' }, { status: 400 });
     }
 
-    const success = deleteProject(projectId);
-    return NextResponse.json({ success, message: success ? 'Projeto excluído com sucesso' : 'Projeto não encontrado' });
+    const result = await deleteProject(id);
+    return NextResponse.json({ success: true, remaining: result.remaining });
   } catch (err: any) {
-    console.error('Error deleting project from DB:', err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }

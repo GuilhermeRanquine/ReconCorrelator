@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCachedRecon, setCachedRecon, upsertAssets } from '@/lib/db';
+import { getReconCache, setReconCache, upsertAssets } from '@/lib/db';
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const domain = searchParams.get('domain');
-    const forceRefresh = searchParams.get('refresh') === 'true';
+    const forceRefresh = searchParams.get('forceRefresh') === 'true';
     return handleCrtsh(domain, forceRefresh);
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message, subdomains: [] }, { status: 500 });
@@ -29,23 +29,23 @@ async function handleCrtsh(domain: string | null | undefined, forceRefresh: bool
 
     const cleanDomain = domain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
 
-    // 1. Check Recon Cache in Database (Idempotency)
+    // 1. Check Database Cache
     if (!forceRefresh) {
-      const cached = getCachedRecon('crtsh', cleanDomain);
+      const cached = await getReconCache('crtsh', cleanDomain);
       if (cached && Array.isArray(cached.subdomains) && cached.subdomains.length > 0) {
         return NextResponse.json({
           success: true,
+          fromCache: true,
           domain: cleanDomain,
           count: cached.subdomains.length,
           subdomains: cached.subdomains,
-          source: 'crt.sh [⚡ DB-CACHE HIT]',
-          queriedAt: cached.queriedAt,
-          fromCache: true,
+          source: 'Database Cache (Recon Engine)',
+          queriedAt: cached.queriedAt || new Date().toISOString(),
         });
       }
     }
 
-    // 2. Query CRT.sh public Certificate Transparency database
+    // 2. Query CRT.sh public database
     const crtUrl = `https://crt.sh/?q=%.${cleanDomain}&output=json`;
 
     const controller = new AbortController();
@@ -55,7 +55,7 @@ async function handleCrtsh(domain: string | null | undefined, forceRefresh: bool
     try {
       const response = await fetch(crtUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ReconCorrelator-Squad/3.5',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ReconCorrelator-Squad/3.4',
           'Accept': 'application/json, text/plain, */*'
         },
         signal: controller.signal,
@@ -95,49 +95,38 @@ async function handleCrtsh(domain: string | null | undefined, forceRefresh: bool
       }
     }
 
-    // Also include standard essential targets if crt.sh returns empty
+    // Also include the root domain itself
     subdomainsSet.add(cleanDomain);
-    subdomainsSet.add(`www.${cleanDomain}`);
-    subdomainsSet.add(`api.${cleanDomain}`);
 
     const subdomains = Array.from(subdomainsSet).sort();
 
-    const payload = {
+    const resultPayload = {
       subdomains,
       queriedAt: new Date().toISOString(),
+      source: 'crt.sh (Certificate Transparency Logs)',
     };
 
-    // 3. Save in DB Cache (120 minutes TTL)
-    setCachedRecon('crtsh', cleanDomain, payload, 120);
+    // 3. Save to database cache
+    await setReconCache('crtsh', cleanDomain, resultPayload, 86400);
 
-    // 4. Auto-persist new subdomains to assets table in DB
-    try {
-      const stubs = subdomains.map(sub => ({
-        subdomain: sub,
-        rootDomain: cleanDomain,
-        isAlive: false,
-        cnames: [],
-        ips: [],
-        ports: [],
-        technologies: [],
-        vulnerabilities: [],
-        takeoverRisk: false,
-        tags: ['crt.sh', 'tls-cert'],
-        discoveredVia: 'crtsh' as const,
-      }));
-      upsertAssets(stubs, cleanDomain);
-    } catch (dbErr) {
-      console.warn('Could not auto-upsert crtsh assets to DB:', dbErr);
-    }
+    // 4. Auto-upsert into database assets collection
+    const assetStubs = subdomains.map(sub => ({
+      subdomain: sub,
+      rootDomain: cleanDomain,
+      isAlive: false,
+      tags: ['crt.sh', 'tls-cert'],
+      discoveredVia: 'crtsh' as const,
+    }));
+    await upsertAssets(assetStubs, cleanDomain);
 
     return NextResponse.json({
       success: true,
+      fromCache: false,
       domain: cleanDomain,
       count: subdomains.length,
       subdomains,
       source: 'crt.sh (Certificate Transparency Logs)',
-      queriedAt: payload.queriedAt,
-      fromCache: false,
+      queriedAt: resultPayload.queriedAt,
     });
   } catch (err: any) {
     console.error('CRT.sh API error:', err);

@@ -86,78 +86,58 @@ export function PipelineRunner({ target, onJobFinished }: PipelineRunnerProps) {
     terminalBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
-  const handleStartPipeline = () => {
+  const handleStartPipeline = async () => {
     setIsRunning(true);
     setCurrentStepIndex(0);
-    setProgress(5);
+    setProgress(15);
     setLogs([]);
     setStats({ subdomains: 0, alive: 0, ports: 0, vulns: 0 });
 
-    addLog('info', 'ALPHA', `[INICIALIZAÇÃO] Iniciando pipeline de Recon para o alvo: ${target.domain}`);
-    addLog('info', 'OPSEC', `[ESCOPO] Verificando regras de escopo ativas: ${target.inScope.length} in-scope, ${target.outOfScope.length} out-of-scope`);
+    addLog('info', 'ALPHA', `[INICIALIZAÇÃO] Disparando motor de reconhecimento no backend para: ${target.domain}`);
+    addLog('info', 'OPSEC', `[ESCOPO] Verificando regras de escopo: ${target.inScope.length} in-scope, ${target.outOfScope.length} out-of-scope`);
 
-    // Step 1: Subfinder
-    setTimeout(() => {
-      setCurrentStepIndex(0);
-      setProgress(20);
-      addLog('info', 'subfinder', `Executando: subfinder -d ${target.domain} -silent -json -all`);
-      addLog('success', 'subfinder', `[+] Encontrado: api.${target.domain} (via Shodan)`);
-      addLog('success', 'subfinder', `[+] Encontrado: auth.${target.domain} (via CertSpotter)`);
-      addLog('success', 'subfinder', `[+] Encontrado: blog-staging.${target.domain} (via Wayback)`);
-      addLog('success', 'subfinder', `[+] Encontrado: ci-pipeline.${target.domain} (via GitHub OSINT)`);
-      addLog('success', 'subfinder', `[+] Encontrado: gitlab.${target.domain} (via DNS brute)`);
-      addLog('success', 'subfinder', `[+] Encontrado: assets-static.${target.domain} (via AWS Certs)`);
-      addLog('success', 'subfinder', `[+] Encontrado: portal.${target.domain} (via Reverse IP)`);
-      setStats(s => ({ ...s, subdomains: 7 }));
+    try {
+      setCurrentStepIndex(1);
+      setProgress(40);
+      addLog('info', 'subfinder', `Consultando Certificate Logs e fontes OSINT no backend...`);
 
-      // Step 2: HTTPX
-      setTimeout(() => {
-        setCurrentStepIndex(1);
-        setProgress(45);
-        addLog('info', 'httpx', `Probing HTTP em 7 alvos descobertos com detecção de tecnologias...`);
-        addLog('success', 'httpx', `[200 OK] https://api.${target.domain} [Acme Core Banking REST API v2] [Spring Boot, Nginx]`);
-        addLog('success', 'httpx', `[200 OK] https://auth.${target.domain} [Keycloak Identity Provider] [Keycloak 22.0.1]`);
-        addLog('warning', 'httpx', `[404 NOT FOUND] http://blog-staging.${target.domain} [CNAME: acmefinance-blog.github.io] (ALERTA DE TAKEOVER)`);
-        addLog('success', 'httpx', `[200 OK] https://ci-pipeline.${target.domain} [Dashboard [Jenkins]] [Jetty/9.4.43]`);
-        addLog('success', 'httpx', `[200 OK] https://gitlab.${target.domain} [GitLab Community Edition]`);
-        addLog('success', 'httpx', `[200 OK] https://portal.${target.domain} [Acme Financial - Home] [React, Next.js, Cloudflare]`);
-        setStats(s => ({ ...s, alive: 6 }));
+      const res = await fetch('/api/recon/runner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: target.domain }),
+      });
+      const data = await res.json();
 
-        // Step 3: Naabu / Nmap
-        setTimeout(() => {
-          setCurrentStepIndex(2);
-          setProgress(70);
-          addLog('info', 'naabu', `Varredura de portas comuns (TCP: 22, 80, 443, 8080, 8443, 9000, 9090, 50000)...`);
-          addLog('success', 'nmap', `[OPEN] api.${target.domain}:8080/tcp (http-proxy / Spring Boot Actuator)`);
-          addLog('success', 'nmap', `[OPEN] ci-pipeline.${target.domain}:22/tcp (OpenSSH 8.2p1)`);
-          addLog('success', 'nmap', `[OPEN] ci-pipeline.${target.domain}:50000/tcp (Jenkins Agent Listener)`);
-          addLog('success', 'nmap', `[OPEN] gitlab.${target.domain}:9090/tcp (Prometheus Metrics Engine)`);
-          setStats(s => ({ ...s, ports: 18 }));
+      if (data.success) {
+        if (data.fromCache) {
+          addLog('success', 'CACHE', `[⚡ CACHE-HIT] Resultados recuperados da base de dados sem requisições repetidas.`);
+        }
+        if (Array.isArray(data.logs)) {
+          data.logs.forEach((l: any) => addLog(l.level, l.tool, l.message));
+        }
 
-          // Step 4: Nuclei
-          setTimeout(() => {
-            setCurrentStepIndex(3);
-            setProgress(90);
-            addLog('info', 'nuclei', `Disparando 3.200+ templates Nuclei (CVEs, Exposures, Misconfigurations, Takeovers)...`);
-            addLog('vuln', 'nuclei', `[CRITICAL] [github-pages-subdomain-takeover] em blog-staging.${target.domain} (CVSS: 9.1)`);
-            addLog('vuln', 'nuclei', `[HIGH] [springboot-actuator-env-exposed] em https://api.${target.domain}:8080/actuator/env (CVSS: 8.6)`);
-            addLog('vuln', 'nuclei', `[HIGH] [jenkins-unauthenticated-read] em https://ci-pipeline.${target.domain}/api/json (CVSS: 7.5)`);
-            addLog('warning', 'nuclei', `[MEDIUM] [openapi-swagger-public-spec] em https://api.${target.domain}/v2/api-docs`);
-            setStats(s => ({ ...s, vulns: 4 }));
+        setCurrentStepIndex(3);
+        setProgress(85);
 
-            // Step 5: Correlator Brain
-            setTimeout(() => {
-              setCurrentStepIndex(4);
-              setProgress(100);
-              addLog('success', 'BETA', `[CORRELAÇÃO] Grafo de ataque reconstruído com sucesso.`);
-              addLog('success', 'OPSEC', `[OPSEC GUARD] Todos os 7 ativos passaram pelas regras de escopo.`);
-              addLog('success', 'ALPHA', `[SQUAD FINALIZADO] Reconcluído. Superfície pronta para exploração e triagem.`);
-              setIsRunning(false);
-            }, 1200);
-          }, 1400);
-        }, 1300);
-      }, 1300);
-    }, 1000);
+        if (data.stats) {
+          setStats(data.stats);
+        }
+
+        if (Array.isArray(data.assets) && data.assets.length > 0) {
+          onJobFinished(data.assets);
+        }
+
+        setCurrentStepIndex(4);
+        setProgress(100);
+        addLog('success', 'ALPHA', `[SQUAD FINALIZADO] Reconhecimento concluído e salvo no banco de dados.`);
+      } else {
+        addLog('error', 'BACKEND', `[-] Erro na execução: ${data.error || 'Falha desconhecida'}`);
+      }
+    } catch (err: any) {
+      addLog('error', 'ENGINE', `[-] Falha na comunicação com o backend: ${err.message}`);
+    } finally {
+      setIsRunning(false);
+    }
   };
 
   const handleStopPipeline = () => {

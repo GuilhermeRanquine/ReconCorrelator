@@ -1,12 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { WebTech } from '@/types/recon';
-import { getCachedRecon, setCachedRecon, upsertAssets } from '@/lib/db';
+import { getReconCache, setReconCache, upsertAssets } from '@/lib/db';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { url, timeoutMs = 6000, forceRefresh = false } = body;
+    return handleHttpProbe(body.url, body.timeoutMs, body.rootDomain, body.forceRefresh);
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
 
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const url = searchParams.get('url') || searchParams.get('host');
+    const timeoutMs = searchParams.get('timeout') ? parseInt(searchParams.get('timeout')!, 10) : 6000;
+    const rootDomain = searchParams.get('rootDomain');
+    const forceRefresh = searchParams.get('forceRefresh') === 'true';
+    return handleHttpProbe(url, timeoutMs, rootDomain, forceRefresh);
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
+
+async function handleHttpProbe(url: string | null | undefined, timeoutMs: number = 6000, rootDomain?: string | null, forceRefresh: boolean = false) {
+  try {
     if (!url) {
       return NextResponse.json({ error: 'URL é obrigatória' }, { status: 400 });
     }
@@ -16,15 +35,17 @@ export async function POST(req: NextRequest) {
       targetUrl = `https://${targetUrl}`;
     }
 
-    const hostExtract = targetUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '').toLowerCase();
+    const hostOnly = targetUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '').toLowerCase();
+    const determinedRootDomain = rootDomain || hostOnly.split('.').slice(-2).join('.');
 
-    // 1. Check Recon Cache
+    // 1. Check Database Cache
     if (!forceRefresh) {
-      const cached = getCachedRecon('http-probe', hostExtract);
-      if (cached) {
+      const cached = await getReconCache('http-probe', targetUrl);
+      if (cached && (cached.status > 0 || cached.isAlive !== undefined)) {
         return NextResponse.json({
-          ...cached,
+          success: true,
           fromCache: true,
+          ...cached,
         });
       }
     }
@@ -46,7 +67,7 @@ export async function POST(req: NextRequest) {
       const response = await fetch(targetUrl, {
         method: 'GET',
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 ReconCorrelator-Squad/3.5',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 ReconCorrelator-Squad/3.4',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.5',
         },
@@ -66,7 +87,7 @@ export async function POST(req: NextRequest) {
       contentType = headers['content-type'] || '';
       contentLength = parseInt(headers['content-length'] || '0', 10);
 
-      // Read snippet to extract title & tech markers
+      // Read a snippet of text to extract title & tech markers
       const htmlText = await response.text();
       const titleMatch = htmlText.match(/<title[^>]*>([^<]+)<\/title>/i);
       if (titleMatch) {
@@ -120,8 +141,7 @@ export async function POST(req: NextRequest) {
       accessControlAllowOrigin: headers['access-control-allow-origin'] || null,
     };
 
-    const result = {
-      success: true,
+    const payload = {
       targetUrl,
       finalUrl,
       isAlive: status > 0,
@@ -137,31 +157,35 @@ export async function POST(req: NextRequest) {
       probedAt: new Date().toISOString(),
     };
 
-    // 2. Cache in DB (60 min TTL)
-    setCachedRecon('http-probe', hostExtract, result, 60);
+    // 2. Save to database cache
+    await setReconCache('http-probe', targetUrl, payload, 43200);
 
-    // 3. Upsert into assets table in DB
-    try {
-      upsertAssets([
-        {
-          subdomain: hostExtract,
-          isAlive: status > 0,
-          httpStatus: status,
-          httpTitle: title,
-          webServer: server,
-          contentType,
-          contentLength,
-          technologies,
-          tags: status > 0 ? ['http-alive'] : ['http-unreachable'],
-        }
-      ]);
-    } catch (dbErr) {
-      console.warn('Could not auto-upsert HTTP probe result to DB:', dbErr);
+    // 3. Auto-update asset in database
+    if (status > 0) {
+      await upsertAssets(
+        [
+          {
+            subdomain: hostOnly,
+            rootDomain: determinedRootDomain,
+            isAlive: true,
+            httpStatus: status,
+            httpTitle: title,
+            webServer: server,
+            contentType,
+            contentLength,
+            responseUrl: finalUrl,
+            technologies,
+            tags: ['http-probed'],
+          },
+        ],
+        determinedRootDomain
+      );
     }
 
     return NextResponse.json({
-      ...result,
+      success: true,
       fromCache: false,
+      ...payload,
     });
   } catch (err: any) {
     console.error('HTTP Probe error:', err);

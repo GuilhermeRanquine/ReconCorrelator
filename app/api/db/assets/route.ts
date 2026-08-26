@@ -1,67 +1,82 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAssets, upsertAssets, addVulnerabilityToAsset, clearAssetsForDomain } from '@/lib/db';
-import { CorrelatedAsset, Vulnerability } from '@/types/recon';
+import { getAssets, upsertAssets, clearAssets, readDb, writeDb } from '@/lib/db';
+import { CorrelatedAsset } from '@/types/recon';
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const projectId = searchParams.get('projectId') || searchParams.get('domain') || undefined;
-    const assets = getAssets(projectId);
+    const rootDomain = searchParams.get('rootDomain');
+    const projectId = searchParams.get('projectId');
 
-    return NextResponse.json({
-      success: true,
-      count: assets.length,
-      assets,
-      aliveCount: assets.filter(a => a.isAlive).length,
-      vulnsCount: assets.reduce((acc, a) => acc + (a.vulnerabilities?.length || 0), 0),
-      takeoverCount: assets.filter(a => a.takeoverRisk).length,
-    });
+    const assets = await getAssets({ rootDomain: rootDomain || undefined, projectId: projectId || undefined });
+    return NextResponse.json({ success: true, count: assets.length, assets });
   } catch (err: any) {
-    console.error('Error fetching assets from DB:', err);
-    return NextResponse.json({ success: false, error: err.message, assets: [] }, { status: 500 });
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    
-    // Check if adding single vulnerability
-    if (body.action === 'add_vulnerability' && body.vulnerability) {
-      const updated = addVulnerabilityToAsset(body.vulnerability as Vulnerability);
-      return NextResponse.json({ success: true, count: updated.length, assets: updated });
+    const { assets: incomingAssets, asset: singleAsset, rootDomain } = body;
+
+    let listToUpsert: Partial<CorrelatedAsset>[] = [];
+
+    if (Array.isArray(incomingAssets)) {
+      listToUpsert = incomingAssets;
+    } else if (singleAsset) {
+      listToUpsert = [singleAsset];
+    } else if (Array.isArray(body)) {
+      listToUpsert = body;
+    } else {
+      return NextResponse.json({ success: false, error: 'Payload de ativos inválido' }, { status: 400 });
     }
 
-    // Check if clear assets for domain
-    if (body.action === 'clear' && body.domain) {
-      clearAssetsForDomain(body.domain);
-      return NextResponse.json({ success: true, message: `Ativos do domínio ${body.domain} limpos com sucesso.` });
-    }
+    const defaultRoot = rootDomain || (listToUpsert[0]?.rootDomain) || 'target.com';
+    const updatedAssets = await upsertAssets(listToUpsert, defaultRoot);
 
-    // Bulk upsert assets
-    const newStubs: Partial<CorrelatedAsset>[] = Array.isArray(body) 
-      ? body 
-      : Array.isArray(body.assets) 
-        ? body.assets 
-        : body.asset 
-          ? [body.asset] 
-          : [];
-
-    if (newStubs.length === 0) {
-      return NextResponse.json({ success: false, error: 'Nenhum ativo informado para persistência.' }, { status: 400 });
-    }
-
-    const rootDomain = body.rootDomain || undefined;
-    const updated = upsertAssets(newStubs, rootDomain);
+    // Return the assets for this rootDomain
+    const filtered = updatedAssets.filter(
+      a => a.rootDomain.toLowerCase() === defaultRoot.toLowerCase() || a.subdomain.toLowerCase().endsWith(`.${defaultRoot.toLowerCase()}`)
+    );
 
     return NextResponse.json({
       success: true,
-      message: `${newStubs.length} ativos processados e salvos no banco de dados central.`,
-      count: updated.length,
-      assets: updated,
+      count: filtered.length,
+      assets: filtered,
+      totalDatabaseAssets: updatedAssets.length,
     });
   } catch (err: any) {
-    console.error('Error upserting assets to DB:', err);
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+    const rootDomain = searchParams.get('rootDomain');
+    const clearAll = searchParams.get('all') === 'true';
+
+    if (id) {
+      const db = await readDb();
+      db.assets = db.assets.filter(a => a.id !== id);
+      await writeDb(db);
+      return NextResponse.json({ success: true, message: `Ativo ${id} removido` });
+    }
+
+    if (rootDomain) {
+      await clearAssets(rootDomain);
+      return NextResponse.json({ success: true, message: `Ativos do domínio ${rootDomain} limpos` });
+    }
+
+    if (clearAll) {
+      await clearAssets();
+      return NextResponse.json({ success: true, message: 'Todos os ativos foram limpos do banco de dados' });
+    }
+
+    return NextResponse.json({ success: false, error: 'Parâmetro id, rootDomain ou all=true é obrigatório' }, { status: 400 });
+  } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }

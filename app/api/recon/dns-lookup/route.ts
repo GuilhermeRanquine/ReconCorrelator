@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DnsRecord } from '@/types/recon';
-import { getCachedRecon, setCachedRecon, upsertAssets, addVulnerabilityToAsset } from '@/lib/db';
+import { getReconCache, setReconCache, upsertAssets } from '@/lib/db';
 
 // Subdomain Takeover Fingerprints
 const TAKEOVER_SERVICES: { cnameMatch: RegExp; service: string; hint: string }[] = [
@@ -52,7 +52,7 @@ async function queryDoH(name: string, type: string): Promise<any[]> {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    return handleDnsLookup(body.host || body.domain, body.forceRefresh);
+    return handleDnsLookup(body.host || body.domain, body.rootDomain, body.forceRefresh);
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
@@ -62,29 +62,31 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const host = searchParams.get('host') || searchParams.get('domain');
-    const forceRefresh = searchParams.get('refresh') === 'true';
-    return handleDnsLookup(host, forceRefresh);
+    const rootDomain = searchParams.get('rootDomain');
+    const forceRefresh = searchParams.get('forceRefresh') === 'true';
+    return handleDnsLookup(host, rootDomain, forceRefresh);
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
 
-async function handleDnsLookup(host: string | null | undefined, forceRefresh: boolean = false) {
+async function handleDnsLookup(host: string | null | undefined, rootDomain?: string | null, forceRefresh: boolean = false) {
   try {
     if (!host) {
       return NextResponse.json({ error: 'Parâmetro host é obrigatório' }, { status: 400 });
     }
 
     const cleanHost = host.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    const determinedRootDomain = rootDomain || cleanHost.split('.').slice(-2).join('.');
 
-    // 1. Check Recon Cache in DB
+    // 1. Check Database Cache
     if (!forceRefresh) {
-      const cached = getCachedRecon('dns-lookup', cleanHost);
-      if (cached) {
+      const cached = await getReconCache('dns-lookup', cleanHost);
+      if (cached && (cached.ips?.length > 0 || cached.cnames?.length > 0 || cached.isAlive !== undefined)) {
         return NextResponse.json({
-          ...cached,
+          success: true,
           fromCache: true,
-          source: 'DoH DNS [⚡ DB-CACHE HIT]',
+          ...cached,
         });
       }
     }
@@ -181,12 +183,9 @@ async function handleDnsLookup(host: string | null | undefined, forceRefresh: bo
       cloudProvider = 'digitalocean';
     }
 
-    const isAlive = ips.length > 0 || cnames.length > 0;
-
-    const result = {
-      success: true,
+    const payload = {
       host: cleanHost,
-      isAlive,
+      isAlive: ips.length > 0 || cnames.length > 0,
       ips: Array.from(new Set(ips)),
       cnames: Array.from(new Set(cnames)),
       dnsRecords,
@@ -197,43 +196,32 @@ async function handleDnsLookup(host: string | null | undefined, forceRefresh: bo
       resolvedAt: new Date().toISOString(),
     };
 
-    // 3. Save in DB cache (60 min TTL)
-    setCachedRecon('dns-lookup', cleanHost, result, 60);
+    // 3. Save to database cache
+    await setReconCache('dns-lookup', cleanHost, payload, 43200);
 
-    // 4. Update asset in DB
-    try {
-      upsertAssets([
+    // 4. Auto-update asset in database
+    await upsertAssets(
+      [
         {
           subdomain: cleanHost,
-          isAlive,
-          ips: result.ips,
-          cnames: result.cnames,
-          cloudProvider,
-          takeoverRisk,
-          takeoverDetails: takeoverRisk ? takeoverDetails : undefined,
-          tags: isAlive ? ['dns-live'] : ['dns-unresolved'],
-        }
-      ]);
-
-      if (takeoverRisk) {
-        addVulnerabilityToAsset({
-          id: `vuln-takeover-${Date.now()}`,
-          templateId: 'takeover-cname-dangling',
-          name: `Potencial Subdomain Takeover (${takeoverService})`,
-          severity: 'high',
-          description: takeoverDetails,
-          matchedAt: cleanHost,
-          sourceTool: 'live-probe',
-          timestamp: new Date().toISOString(),
-        });
-      }
-    } catch (dbErr) {
-      console.warn('Could not auto-upsert DNS result to DB:', dbErr);
-    }
+          rootDomain: determinedRootDomain,
+          isAlive: payload.isAlive,
+          ips: payload.ips,
+          cnames: payload.cnames,
+          dnsRecords: payload.dnsRecords,
+          cloudProvider: payload.cloudProvider,
+          takeoverRisk: payload.takeoverRisk,
+          takeoverDetails: payload.takeoverDetails,
+          tags: ['doh-resolved'],
+        },
+      ],
+      determinedRootDomain
+    );
 
     return NextResponse.json({
-      ...result,
+      success: true,
       fromCache: false,
+      ...payload,
     });
   } catch (err: any) {
     console.error('DNS Lookup Error:', err);

@@ -129,58 +129,43 @@ export function TerminalArsenal({
   const terminalBodyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Initial load from Central DB with LocalStorage fallback
+  // Initial load from Backend Database API
   useEffect(() => {
-    let isMounted = true;
-    const loadFromDb = async () => {
+    async function loadTerminalState() {
       try {
-        const res = await fetch(`/api/db/terminal?projectId=${encodeURIComponent(target.id)}`);
-        const data = await res.json();
-        if (isMounted && data.success && Array.isArray(data.sessions) && data.sessions.length > 0) {
-          setSessions(data.sessions);
-          setActiveSessionId(data.sessions[0].id);
-          if (Array.isArray(data.folders) && data.folders.length > 0) {
-            setFolders(data.folders);
+        const res = await fetch(`/api/db/terminal?targetId=${encodeURIComponent(target.id)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            if (Array.isArray(data.folders) && data.folders.length > 0) {
+              setFolders(data.folders);
+            } else {
+              setFolders(DEFAULT_FOLDERS);
+            }
+
+            if (Array.isArray(data.sessions) && data.sessions.length > 0) {
+              setSessions(data.sessions);
+              setActiveSessionId(data.sessions[0].id);
+              return;
+            }
           }
-          return;
         }
-      } catch (dbErr) {
-        console.warn('Could not fetch terminal sessions from central DB, checking local storage:', dbErr);
+      } catch (e) {
+        console.warn('Error loading terminal from DB:', e);
       }
 
-      // Fallback to localStorage
-      try {
-        const savedFolders = localStorage.getItem(`recon_folders_${target.id}`);
-        const savedSessions = localStorage.getItem(`recon_sessions_${target.id}`);
-        const savedHistory = localStorage.getItem(`recon_history_${target.id}`);
-
-        if (savedFolders) {
-          setFolders(JSON.parse(savedFolders));
-        } else {
-          setFolders(DEFAULT_FOLDERS);
-        }
-
-        if (savedSessions) {
-          const parsed = JSON.parse(savedSessions);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setSessions(parsed);
-            setActiveSessionId(parsed[0].id);
-            return;
-          }
-        }
-
-        // Default initial session
-        const initialSession: TerminalSession = {
-          id: `sess-${Date.now()}`,
-          name: `Recon Shell (${target.domain})`,
-          folderId: 'recon-osint',
-          pinned: true,
-          createdAt: new Date().toISOString(),
-          lines: [
-            {
-              id: 'init-banner',
-              type: 'banner',
-              text: `
+      // Default initial session
+      const initialSession: TerminalSession = {
+        id: `sess-${Date.now()}`,
+        name: `Recon Shell (${target.domain})`,
+        folderId: 'recon-osint',
+        pinned: true,
+        createdAt: new Date().toISOString(),
+        lines: [
+          {
+            id: 'init-banner',
+            type: 'banner',
+            text: `
  ██████╗ ███████╗ ██████╗ ██████╗ ███╗   ██╗     █████╗ ██████╗ ███████╗███████╗███╗   ██╗ █████╗ ██╗     
  ██╔══██╗██╔════╝██╔════╝██╔═══██╗████╗  ██║    ██╔══██╗██╔══██╗██╔════╝██╔════╝████╗  ██║██╔══██╗██║     
  ██████╔╝█████╗  ██║     ██║   ██║██╔██╗ ██║    ███████║██████╔╝███████╗█████╗  ██╔██╗ ██║███████║██║     
@@ -189,57 +174,37 @@ export function TerminalArsenal({
  ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝    ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝
         [+] Bug Bounty RedTeam Shell v4.5 | Alvo Ativo: ${target.domain}
         [+] Header Ativo: ${activeHeader}
-        [+] Conectado ao Central Server DB (Persistência Contínua & Caching Idempotente Ativo)
         [+] Suporta comandos de rede (crtsh, dnsx, httpx, wayback, nuclei) e prompts de IA Gemini!
-        [+] Digite 'help' para comandos ou faça perguntas diretamente em linguagem natural.
-              `,
-              timestamp: new Date().toLocaleTimeString(),
-            }
-          ]
-        };
-        setSessions([initialSession]);
-        setActiveSessionId(initialSession.id);
+        [+] Banco de Dados Backend: Persistência centralizada & Caching ativo.
+            `,
+            timestamp: new Date().toLocaleTimeString(),
+          }
+        ]
+      };
+      setSessions([initialSession]);
+      setActiveSessionId(initialSession.id);
+    }
+    loadTerminalState();
+  }, [target.id]);
 
-        if (savedHistory) {
-          setHistory(JSON.parse(savedHistory));
-        }
-      } catch (e) {
-        console.warn('LocalStorage error in TerminalArsenal:', e);
-      }
-    };
-
-    loadFromDb();
-    return () => { isMounted = false; };
-  }, [target.id, target.domain, activeHeader]);
-
-  // Persist folders to DB and fallback localStorage
+  // Persist folders
   const saveFolders = (newFolders: TerminalFolder[]) => {
     setFolders(newFolders);
-    try {
-      localStorage.setItem(`recon_folders_${target.id}`, JSON.stringify(newFolders));
-      fetch('/api/db/terminal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: target.id, folders: newFolders, sessions }),
-      }).catch(err => console.warn('Could not save folders to central DB:', err));
-    } catch (e) {
-      console.warn('Folder save error:', e);
-    }
+    fetch('/api/db/terminal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetId: target.id, folders: newFolders, sessions }),
+    }).catch(e => console.warn('DB terminal save error:', e));
   };
 
-  // Persist sessions to DB and fallback localStorage
+  // Persist sessions
   const saveSessions = (newSessions: TerminalSession[]) => {
     setSessions(newSessions);
-    try {
-      localStorage.setItem(`recon_sessions_${target.id}`, JSON.stringify(newSessions));
-      fetch('/api/db/terminal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: target.id, sessions: newSessions, folders }),
-      }).catch(err => console.warn('Could not save sessions to central DB:', err));
-    } catch (e) {
-      console.warn('Session save error:', e);
-    }
+    fetch('/api/db/terminal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetId: target.id, folders, sessions: newSessions }),
+    }).catch(e => console.warn('DB terminal save error:', e));
   };
 
   // Get active session
@@ -464,7 +429,11 @@ export function TerminalArsenal({
           const data = await res.json();
 
           if (data.success && data.subdomains) {
-            addLine('success', `[+] CRT.sh retornou ${data.count} subdomínios únicos para ${dom}!`);
+            if (data.fromCache) {
+              addLine('system', `[⚡ CACHE-HIT] ${data.count} subdomínios carregados da base de dados persistente em 1ms.`);
+            } else {
+              addLine('success', `[+] CRT.sh retornou ${data.count} subdomínios únicos para ${dom}!`);
+            }
             
             const discoveredStubs = data.subdomains.map((s: string) => ({
               subdomain: s,
@@ -496,6 +465,9 @@ export function TerminalArsenal({
           const data = await res.json();
 
           if (data.success) {
+            if (data.fromCache) {
+              addLine('system', `[⚡ CACHE-HIT] Resolução DNS recuperada do Banco de Dados em 1ms.`);
+            }
             let output = `[+] Resolução DNS para ${host}:\n`;
             if (data.ips?.length) output += `  • IPs (A): ${data.ips.join(', ')}\n`;
             if (data.cnames?.length) output += `  • CNAME: ${data.cnames.join(' -> ')}\n`;
@@ -556,6 +528,9 @@ export function TerminalArsenal({
           const data = await res.json();
 
           if (data.success) {
+            if (data.fromCache) {
+              addLine('system', `[⚡ CACHE-HIT] Probe HTTP recuperado do Banco de Dados em 1ms.`);
+            }
             const statusColor = data.status === 200 ? '✅' : '⚠️';
             addLine('success', `
 [+] RESPOSTA HTTP (${data.targetUrl}):
@@ -604,6 +579,9 @@ export function TerminalArsenal({
           const data = await res.json();
 
           if (data.success && data.urls) {
+            if (data.fromCache) {
+              addLine('system', `[⚡ CACHE-HIT] URLs históricas recuperadas do Banco de Dados.`);
+            }
             addLine('success', `[+] Encontradas ${data.totalUrls || data.urls.length} URLs históricas indexadas!`);
             const preview = data.urls.slice(0, 10).map((u: string) => `  • ${u}`).join('\n');
             addLine('output', preview + (data.urls.length > 10 ? `\n  ... e mais ${data.urls.length - 10} URLs mineradas!` : ''));

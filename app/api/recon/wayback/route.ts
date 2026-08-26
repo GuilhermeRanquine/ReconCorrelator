@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCachedRecon, setCachedRecon } from '@/lib/db';
+import { getReconCache, setReconCache } from '@/lib/db';
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const domain = searchParams.get('domain');
     const limit = parseInt(searchParams.get('limit') || '100', 10);
-    const forceRefresh = searchParams.get('refresh') === 'true';
+    const forceRefresh = searchParams.get('forceRefresh') === 'true';
     return handleWayback(domain, limit, forceRefresh);
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message, urls: [] }, { status: 500 });
@@ -30,14 +30,14 @@ async function handleWayback(domain: string | null | undefined, limit: number = 
 
     const cleanDomain = domain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
 
-    // 1. Check Recon Cache in DB
+    // 1. Check Database Cache
     if (!forceRefresh) {
-      const cached = getCachedRecon('wayback', cleanDomain, `limit-${limit}`);
-      if (cached) {
+      const cached = await getReconCache('wayback', cleanDomain);
+      if (cached && Array.isArray(cached.urls) && cached.urls.length > 0) {
         return NextResponse.json({
-          ...cached,
+          success: true,
           fromCache: true,
-          source: 'Archive.org / OTX [⚡ DB-CACHE HIT]',
+          ...cached,
         });
       }
     }
@@ -52,7 +52,7 @@ async function handleWayback(domain: string | null | undefined, limit: number = 
     try {
       const response = await fetch(waybackUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ReconCorrelator-Squad/3.5',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ReconCorrelator-Squad/3.4',
         },
         signal: AbortSignal.timeout(8000),
       });
@@ -86,7 +86,7 @@ async function handleWayback(domain: string | null | undefined, limit: number = 
     try {
       const otxUrl = `https://otx.alienvault.com/api/v1/indicators/domain/${cleanDomain}/url_list?limit=50&page=1`;
       const otxRes = await fetch(otxUrl, {
-        headers: { 'User-Agent': 'ReconCorrelator-Squad/3.5' },
+        headers: { 'User-Agent': 'ReconCorrelator-Squad/3.4' },
         signal: AbortSignal.timeout(6000),
       });
       if (otxRes.ok) {
@@ -109,8 +109,7 @@ async function handleWayback(domain: string | null | undefined, limit: number = 
     const allUrls = Array.from(urlsSet);
     const jsFiles = Array.from(jsFilesSet);
 
-    const result = {
-      success: true,
+    const payload = {
       domain: cleanDomain,
       totalUrls: allUrls.length,
       urls: allUrls.slice(0, 300),
@@ -120,12 +119,13 @@ async function handleWayback(domain: string | null | undefined, limit: number = 
       queriedAt: new Date().toISOString(),
     };
 
-    // 2. Cache in DB (120 min TTL)
-    setCachedRecon('wayback', cleanDomain, result, 120, `limit-${limit}`);
+    // 2. Save to database cache
+    await setReconCache('wayback', cleanDomain, payload, 86400);
 
     return NextResponse.json({
-      ...result,
+      success: true,
       fromCache: false,
+      ...payload,
     });
   } catch (err: any) {
     console.error('Archive URLs error:', err);
